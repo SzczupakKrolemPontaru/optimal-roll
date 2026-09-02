@@ -1,0 +1,11 @@
+// ignore_for_file: constant_identifier_names
+const DICE_COUNT = 6;
+const MIN_DIE_VALUE = 1;
+const MAX_DIE_VALUE = 6;
+const SCHOOL_NEUTRAL_COUNT = 3;
+const SCHOOL_BONUS_THRESHOLD = 10;
+const SCHOOL_BONUS_POINTS = 50;
+const PERFECT_COLUMN_BONUS = 100;
+const SMALL_STRAIGHT_POINTS = 15;
+const BIG_STRAIGHT_POINTS = 20;
+const GREAT_STRAIGHT_POINTS = 35;
