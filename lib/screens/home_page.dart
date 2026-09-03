@@ -18,13 +18,7 @@ class _HomePageState extends State<HomePage> {
   DiceRoll diceRoll = DiceRoll([4, 4, 4, 4, 4, 2]);
   final Random random = Random();
   final GameState gameState = GameState([
-    ScoreColumn(
-      school: {
-        1: ScoreEntry.scored(-2),
-        2: ScoreEntry.scored(2),
-        3: ScoreEntry.scored(0),
-      },
-    ),
+    ScoreColumn(),
     ScoreColumn(),
     ScoreColumn(),
   ]);
@@ -37,6 +31,22 @@ class _HomePageState extends State<HomePage> {
       ),
     ),
   );
+
+  void updateDice(List<int> values) =>
+      setState(() => diceRoll = DiceRoll(values));
+
+  void refreshGameState() => setState(() {});
+
+  void restartGame() => setState(() {
+    for (final column in gameState.columns) {
+      for (final face in column.school.keys) {
+        column.school[face] = const ScoreEntry.empty();
+      }
+      for (final figure in column.figures.keys) {
+        column.figures[figure] = const ScoreEntry.empty();
+      }
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -60,9 +70,13 @@ class _HomePageState extends State<HomePage> {
                     DiceRollView(
                       diceRoll: diceRoll,
                       onRoll: generateRandomRoll,
+                      onValuesChanged: updateDice,
                     ),
                     const SizedBox(height: 24),
-                    FigureScoresView(figureScores: figureScores),
+                    FigureScoresView(
+                      figureScores: figureScores,
+                      diceRoll: diceRoll,
+                    ),
                   ],
                 ),
               ),
@@ -70,7 +84,12 @@ class _HomePageState extends State<HomePage> {
                 width: constraints.maxWidth > 800
                     ? constraints.maxWidth * .46
                     : constraints.maxWidth,
-                child: ScorecardView(gameState: gameState),
+                child: ScorecardView(
+                  gameState: gameState,
+                  diceRoll: diceRoll,
+                  onChanged: refreshGameState,
+                  onRestart: restartGame,
+                ),
               ),
             ],
           ),

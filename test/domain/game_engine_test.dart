@@ -28,7 +28,7 @@ void main() {
       final scores = evaluateFigures(DiceRoll([5, 5, 5, 5, 2, 2]));
       expect(scores[Figure.FOUR_OF_A_KIND], 20);
       expect(scores[Figure.GENERAL], isNull);
-      expect(scores[Figure.FOUR_PLUS_TWO], isNull);
+      expect(scores[Figure.FOUR_PLUS_TWO], 24);
     });
 
     test('evaluates general and four plus two with five matching dice', () {

@@ -5,8 +5,14 @@ import '../domain/game_engine.dart';
 class DiceRollView extends StatelessWidget {
   final DiceRoll diceRoll;
   final VoidCallback onRoll;
+  final ValueChanged<List<int>> onValuesChanged;
 
-  const DiceRollView({super.key, required this.diceRoll, required this.onRoll});
+  const DiceRollView({
+    super.key,
+    required this.diceRoll,
+    required this.onRoll,
+    required this.onValuesChanged,
+  });
 
   @override
   Widget build(BuildContext context) => Column(
@@ -26,10 +32,43 @@ class DiceRollView extends StatelessWidget {
       const SizedBox(height: 12),
       Wrap(
         spacing: 10,
-        children: diceRoll.values.map((value) => _DieTile(value)).toList(),
+        children: diceRoll.values
+            .asMap()
+            .entries
+            .map(
+              (entry) => GestureDetector(
+                onTap: () => _showValuePicker(context, entry.key),
+                child: _DieTile(entry.value),
+              ),
+            )
+            .toList(),
       ),
     ],
   );
+
+  void _showValuePicker(BuildContext context, int dieIndex) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose die value'),
+        content: Wrap(
+          spacing: 8,
+          children: [
+            for (var face = 1; face <= 6; face++)
+              if (face != diceRoll.values[dieIndex])
+                GestureDetector(
+                  onTap: () {
+                    final values = [...diceRoll.values]..[dieIndex] = face;
+                    onValuesChanged(values);
+                    Navigator.pop(context);
+                  },
+                  child: _DieTile(face),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DieTile extends StatelessWidget {

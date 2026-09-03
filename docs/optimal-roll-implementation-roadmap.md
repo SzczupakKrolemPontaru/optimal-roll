@@ -298,6 +298,19 @@ the rules or strategy engine dependent on inaccurate image recognition.
 
 ## 5. First MVP Completion Criteria
 
+School entries are strategic scoring options and must be evaluated alongside
+figures at every stage. The move generator and future strategy engine must
+consider:
+
+- every empty school field in every column,
+- the school score `(matching dice - 3) * face`,
+- opening a figures section after the third school entry,
+- the effect of crossing school-bonus thresholds,
+- the opportunity cost of using a roll for school instead of a figure.
+
+The advisor must never optimize only for figures while ignoring legal school
+entries.
+
 The first stage can be considered complete when:
 
 - all figures described in the specification are detected correctly,

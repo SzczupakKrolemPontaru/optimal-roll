@@ -18,6 +18,11 @@ Map<Figure, int> evaluateFigures(DiceRoll diceRoll) {
         .skip(pairFaces.length - 2)
         .fold(0, (total, faceValue) => total + faceValue * 2);
   }
+  if (pairFaces.length >= 3) {
+    figureScores[Figure.THREE_PAIRS] = pairFaces
+        .take(3)
+        .fold(0, (total, faceValue) => total + faceValue * 2);
+  }
 
   for (var faceIndex = 0; faceIndex < DICE_COUNT; faceIndex++) {
     final faceValue = faceIndex + 1;
@@ -28,6 +33,27 @@ Map<Figure, int> evaluateFigures(DiceRoll diceRoll) {
     if (faceCount == DICE_COUNT) {
       figureScores[Figure.MARSHAL] = 100 + faceValue * 10;
     }
+  }
+  final fourFaceIndex = diceCounts.indexWhere((count) => count >= 4);
+  var twoFaceIndex = -1;
+  for (var faceIndex = 0; faceIndex < DICE_COUNT; faceIndex++) {
+    if (faceIndex != fourFaceIndex && diceCounts[faceIndex] >= 2) {
+      twoFaceIndex = faceIndex;
+      break;
+    }
+  }
+  if (fourFaceIndex >= 0 && twoFaceIndex >= 0) {
+    figureScores[Figure.FOUR_PLUS_TWO] =
+        (fourFaceIndex + 1) * 4 + (twoFaceIndex + 1) * 2;
+  }
+  final tripleFaceIndices = [
+    for (var faceIndex = 0; faceIndex < DICE_COUNT; faceIndex++)
+      if (diceCounts[faceIndex] >= 3) faceIndex,
+  ];
+  if (tripleFaceIndices.length >= 2) {
+    figureScores[Figure.TWO_TRIPLES] = tripleFaceIndices
+        .take(2)
+        .fold(0, (total, faceIndex) => total + (faceIndex + 1) * 3);
   }
 
   if ([1, 2, 3, 4, 5].every((faceValue) => diceCounts[faceValue - 1] > 0)) {
