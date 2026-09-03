@@ -7,6 +7,8 @@ class SchoolField extends StatelessWidget {
   final int face;
   final DiceRoll diceRoll;
   final VoidCallback onChanged;
+  final VoidCallback onScored;
+  final bool canScore;
 
   const SchoolField({
     super.key,
@@ -14,6 +16,8 @@ class SchoolField extends StatelessWidget {
     required this.face,
     required this.diceRoll,
     required this.onChanged,
+    required this.onScored,
+    required this.canScore,
   });
 
   @override
@@ -21,13 +25,16 @@ class SchoolField extends StatelessWidget {
     final validPoints =
         (diceRoll.counts[face - 1] - SCHOOL_NEUTRAL_COUNT) * face;
     final current = column.school[face]!;
-    final selectedPoints =
-        current.status == FieldStatus.SCORED && current.points == validPoints
+    // A scored school field must keep displaying its stored value even when
+    // the dice are rolled again for the next turn.
+    final selectedPoints = current.status == FieldStatus.SCORED
         ? current.points
         : null;
     return InkWell(
       borderRadius: BorderRadius.circular(6),
-      onTap: () => _showScoreActions(context, validPoints, selectedPoints),
+      onTap: canScore
+          ? () => _showScoreActions(context, validPoints, selectedPoints)
+          : null,
       child: Container(
         constraints: const BoxConstraints(minWidth: 64),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -73,6 +80,7 @@ class SchoolField extends StatelessWidget {
     if (action == 'score' && selectedPoints == null) {
       column.school[face] = ScoreEntry.scored(validPoints);
       onChanged();
+      onScored();
     }
     if (action == 'clear') {
       column.school[face] = const ScoreEntry.empty();

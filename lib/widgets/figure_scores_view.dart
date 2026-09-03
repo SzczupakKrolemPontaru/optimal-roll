@@ -5,11 +5,13 @@ import '../domain/game_engine.dart';
 class FigureScoresView extends StatelessWidget {
   final Map<Figure, int> figureScores;
   final DiceRoll diceRoll;
+  final GameState gameState;
 
   const FigureScoresView({
     super.key,
     required this.figureScores,
     required this.diceRoll,
+    required this.gameState,
   });
 
   @override
@@ -24,7 +26,9 @@ class FigureScoresView extends StatelessWidget {
             children: [
               for (var face = 1; face <= 6; face++) _SchoolRow(face, diceRoll),
               const Divider(),
-              for (final entry in figureScores.entries)
+              for (final entry in figureScores.entries.where(
+                _hasAvailableField,
+              ))
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
@@ -53,6 +57,11 @@ class FigureScoresView extends StatelessWidget {
         ),
       ),
     ],
+  );
+
+  bool _hasAvailableField(MapEntry<Figure, int> entry) => gameState.columns.any(
+    (column) =>
+        column.isOpen && column.figures[entry.key]!.status == FieldStatus.EMPTY,
   );
 }
 

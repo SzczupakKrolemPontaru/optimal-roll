@@ -6,12 +6,18 @@ class DiceRollView extends StatelessWidget {
   final DiceRoll diceRoll;
   final VoidCallback onRoll;
   final ValueChanged<List<int>> onValuesChanged;
+  final int rollsUsed;
+  final List<bool> heldDice;
+  final ValueChanged<int> onDieTapped;
 
   const DiceRollView({
     super.key,
     required this.diceRoll,
     required this.onRoll,
     required this.onValuesChanged,
+    required this.rollsUsed,
+    required this.heldDice,
+    required this.onDieTapped,
   });
 
   @override
@@ -23,9 +29,9 @@ class DiceRollView extends StatelessWidget {
         children: [
           const Text('Current roll', style: TextStyle(fontSize: 22)),
           FilledButton.icon(
-            onPressed: onRoll,
+            onPressed: rollsUsed < 3 ? onRoll : null,
             icon: const Icon(Icons.casino),
-            label: const Text('Roll dice'),
+            label: Text(rollsUsed == 0 ? 'First roll' : 'Roll again'),
           ),
         ],
       ),
@@ -37,38 +43,21 @@ class DiceRollView extends StatelessWidget {
             .entries
             .map(
               (entry) => GestureDetector(
-                onTap: () => _showValuePicker(context, entry.key),
-                child: _DieTile(entry.value),
+                onTap: rollsUsed == 0 ? null : () => onDieTapped(entry.key),
+                child: Column(
+                  children: [
+                    _DieTile(entry.value),
+                    if (heldDice[entry.key])
+                      const Text('HELD', style: TextStyle(fontSize: 10)),
+                  ],
+                ),
               ),
             )
             .toList(),
       ),
+      if (rollsUsed > 0) Text('Rolls: $rollsUsed/3 • tap dice to hold them.'),
     ],
   );
-
-  void _showValuePicker(BuildContext context, int dieIndex) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Choose die value'),
-        content: Wrap(
-          spacing: 8,
-          children: [
-            for (var face = 1; face <= 6; face++)
-              if (face != diceRoll.values[dieIndex])
-                GestureDetector(
-                  onTap: () {
-                    final values = [...diceRoll.values]..[dieIndex] = face;
-                    onValuesChanged(values);
-                    Navigator.pop(context);
-                  },
-                  child: _DieTile(face),
-                ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _DieTile extends StatelessWidget {

@@ -16,6 +16,8 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   DiceRoll diceRoll = DiceRoll([4, 4, 4, 4, 4, 2]);
+  int rollsUsed = 0;
+  List<bool> heldDice = List.filled(DICE_COUNT, false);
   final Random random = Random();
   final GameState gameState = GameState([
     ScoreColumn(),
@@ -23,17 +25,30 @@ class _HomePageState extends State<HomePage> {
     ScoreColumn(),
   ]);
 
-  void generateRandomRoll() => setState(
-    () => diceRoll = DiceRoll(
-      List.generate(
-        DICE_COUNT,
-        (_) => random.nextInt(MAX_DIE_VALUE) + MIN_DIE_VALUE,
-      ),
-    ),
-  );
+  void generateRandomRoll() {
+    if (rollsUsed >= 3) return;
+    setState(() {
+      final values = [...diceRoll.values];
+      for (var i = 0; i < DICE_COUNT; i++) {
+        if (rollsUsed == 0 || !heldDice[i]) {
+          values[i] = random.nextInt(MAX_DIE_VALUE) + 1;
+        }
+      }
+      diceRoll = DiceRoll(values);
+      rollsUsed++;
+    });
+  }
 
   void updateDice(List<int> values) =>
       setState(() => diceRoll = DiceRoll(values));
+
+  void toggleHeld(int index) =>
+      setState(() => heldDice[index] = !heldDice[index]);
+
+  void finishTurn() => setState(() {
+    rollsUsed = 0;
+    heldDice = List.filled(DICE_COUNT, false);
+  });
 
   void refreshGameState() => setState(() {});
 
@@ -46,6 +61,8 @@ class _HomePageState extends State<HomePage> {
         column.figures[figure] = const ScoreEntry.empty();
       }
     }
+    rollsUsed = 0;
+    heldDice = List.filled(DICE_COUNT, false);
   });
 
   @override
@@ -71,11 +88,15 @@ class _HomePageState extends State<HomePage> {
                       diceRoll: diceRoll,
                       onRoll: generateRandomRoll,
                       onValuesChanged: updateDice,
+                      rollsUsed: rollsUsed,
+                      heldDice: heldDice,
+                      onDieTapped: toggleHeld,
                     ),
                     const SizedBox(height: 24),
                     FigureScoresView(
                       figureScores: figureScores,
                       diceRoll: diceRoll,
+                      gameState: gameState,
                     ),
                   ],
                 ),
@@ -88,6 +109,8 @@ class _HomePageState extends State<HomePage> {
                   gameState: gameState,
                   diceRoll: diceRoll,
                   onChanged: refreshGameState,
+                  onScored: finishTurn,
+                  canScore: rollsUsed > 0,
                   onRestart: restartGame,
                 ),
               ),

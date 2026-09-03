@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../domain/game_engine.dart';
-import 'school_field.dart';
+import '../shared/figure_labels.dart';
 import 'figure_field.dart';
+import 'school_field.dart';
 
 class ScorecardView extends StatelessWidget {
   final GameState gameState;
   final DiceRoll diceRoll;
   final VoidCallback onChanged;
   final VoidCallback onRestart;
+  final VoidCallback onScored;
+  final bool canScore;
 
   const ScorecardView({
     super.key,
@@ -16,6 +19,8 @@ class ScorecardView extends StatelessWidget {
     required this.diceRoll,
     required this.onChanged,
     required this.onRestart,
+    required this.onScored,
+    required this.canScore,
   });
 
   @override
@@ -72,6 +77,8 @@ class ScorecardView extends StatelessWidget {
                           face: face,
                           diceRoll: diceRoll,
                           onChanged: onChanged,
+                          onScored: onScored,
+                          canScore: canScore,
                         ),
                       ),
                     ),
@@ -104,7 +111,7 @@ class ScorecardView extends StatelessWidget {
                       padding: const EdgeInsets.all(8),
                       child: Center(
                         child: Text(
-                          _figureLabel(figure),
+                          scorecardFigureLabel(figure),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 13,
@@ -122,6 +129,8 @@ class ScorecardView extends StatelessWidget {
                             figure: figure,
                             diceRoll: diceRoll,
                             onChanged: onChanged,
+                            onScored: onScored,
+                            canScore: canScore,
                             isColumnOpen: column.isOpen,
                           ),
                         ),
@@ -136,24 +145,4 @@ class ScorecardView extends StatelessWidget {
       ),
     ),
   );
-
-  String _figureLabel(Figure figure) => switch (figure) {
-    Figure.PAIR => '1',
-    Figure.TWO_PAIRS => '2',
-    Figure.THREE_OF_A_KIND => '3',
-    Figure.FOUR_OF_A_KIND => '4',
-    Figure.GENERAL => '5',
-    Figure.MARSHAL => '6',
-    Figure.THREE_PAIRS => '3x2',
-    Figure.TWO_TRIPLES => '2x3',
-    Figure.FOUR_PLUS_TWO => '4+2',
-    Figure.SMALL_STRAIGHT => 'SM',
-    Figure.BIG_STRAIGHT => 'SD',
-    Figure.GREAT_STRAIGHT => 'SW',
-    Figure.EVEN => 'P',
-    Figure.ODD => 'N',
-    Figure.FULL_HOUSE => 'F',
-    Figure.SMALL => 'M',
-    Figure.CHANCE => 'Sz',
-  };
 }

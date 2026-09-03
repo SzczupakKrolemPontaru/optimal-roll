@@ -1,7 +1,7 @@
-export 'dice_roll.dart';
-export 'game_state.dart';
-export 'scoring_option.dart';
-export 'figure_evaluator.dart';
-export 'legal_moves.dart';
 export 'constants.dart';
+export 'dice_roll.dart';
+export 'figure_evaluator.dart';
 export 'figures.dart';
+export 'game_state.dart';
+export 'legal_moves.dart';
+export 'scoring_option.dart';
