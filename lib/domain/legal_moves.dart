@@ -5,7 +5,11 @@ import 'figures.dart';
 import 'game_state.dart';
 import 'scoring_option.dart';
 
-List<ScoringOption> legalOptions(DiceRoll dice, GameState game) {
+List<ScoringOption> legalOptions(
+  DiceRoll dice,
+  GameState game, {
+  bool figuresFromHand = false,
+}) {
   final options = <ScoringOption>[];
   final figures = evaluateFigures(dice);
   for (final columnEntry in game.columns.asMap().entries) {
@@ -29,7 +33,7 @@ List<ScoringOption> legalOptions(DiceRoll dice, GameState game) {
             ScoringOption.figure(
               columnIndex: columnIndex,
               figure: entry.key,
-              points: entry.value,
+              points: figuresFromHand ? entry.value * 2 : entry.value,
             ),
           );
         }

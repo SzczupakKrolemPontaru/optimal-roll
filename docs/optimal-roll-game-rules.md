@@ -29,6 +29,20 @@ On their turn, a player may roll at most **3 times**.
 
 The first roll is made with all 6 dice.
 
+If a figure is recorded immediately after the first roll, it is considered a
+figure rolled **from hand** and scores double its normal number of points.
+
+```text
+figure_points_from_hand = normal_figure_points * 2
+```
+
+This rule applies to every field in the figures section, including Chance. It
+does not apply to school fields. A school result always uses the standard
+school formula, regardless of which roll produced it.
+
+Example: a Great Straight normally scores 35 points. A Great Straight recorded
+directly after the first roll scores 70 points.
+
 ### 2.2. Second and Third Roll
 
 After each roll, the player may:

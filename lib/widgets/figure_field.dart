@@ -12,6 +12,7 @@ class FigureField extends StatelessWidget {
   final bool canScore;
   final bool isRecommended;
   final bool isRecommendedPijol;
+  final bool figuresFromHand;
 
   const FigureField({
     super.key,
@@ -24,12 +25,18 @@ class FigureField extends StatelessWidget {
     required this.canScore,
     this.isRecommended = false,
     this.isRecommendedPijol = false,
+    this.figuresFromHand = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final entry = column.figures[figure]!;
-    final availablePoints = evaluateFigures(diceRoll)[figure];
+    final basePoints = evaluateFigures(diceRoll)[figure];
+    final availablePoints = basePoints == null
+        ? null
+        : figuresFromHand
+        ? basePoints * 2
+        : basePoints;
     final isEmpty = entry.status == FieldStatus.EMPTY;
     final canScoreField =
         canScore && isColumnOpen && availablePoints != null && isEmpty;

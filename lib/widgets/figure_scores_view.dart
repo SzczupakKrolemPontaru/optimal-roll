@@ -6,12 +6,14 @@ class FigureScoresView extends StatelessWidget {
   final Map<Figure, int> figureScores;
   final DiceRoll diceRoll;
   final GameState gameState;
+  final bool figuresFromHand;
 
   const FigureScoresView({
     super.key,
     required this.figureScores,
     required this.diceRoll,
     required this.gameState,
+    this.figuresFromHand = false,
   });
 
   @override
@@ -24,7 +26,8 @@ class FigureScoresView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
           child: Column(
             children: [
-              for (var face = 1; face <= 6; face++) _SchoolRow(face, diceRoll),
+              for (var face = 1; face <= 6; face++)
+                if (_hasAvailableSchoolField(face)) _SchoolRow(face, diceRoll),
               const Divider(),
               for (final entry in figureScores.entries.where(
                 _hasAvailableField,
@@ -41,7 +44,7 @@ class FigureScoresView extends StatelessWidget {
                       SizedBox(
                         width: 80,
                         child: Text(
-                          '${entry.value} pts',
+                          '${figuresFromHand ? entry.value * 2 : entry.value} pts',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -49,6 +52,11 @@ class FigureScoresView extends StatelessWidget {
                         width: 150,
                         child: _FigureDice(entry.key, diceRoll),
                       ),
+                      if (figuresFromHand)
+                        const Tooltip(
+                          message: 'Figure rolled from hand: double points',
+                          child: Icon(Icons.bolt, size: 16),
+                        ),
                     ],
                   ),
                 ),
@@ -62,6 +70,10 @@ class FigureScoresView extends StatelessWidget {
   bool _hasAvailableField(MapEntry<Figure, int> entry) => gameState.columns.any(
     (column) =>
         column.isOpen && column.figures[entry.key]!.status == FieldStatus.EMPTY,
+  );
+
+  bool _hasAvailableSchoolField(int face) => gameState.columns.any(
+    (column) => column.school[face]!.status == FieldStatus.EMPTY,
   );
 }
 

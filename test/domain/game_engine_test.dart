@@ -167,6 +167,62 @@ void main() {
       expect(schoolOnes.map((option) => option.columnIndex), [0, 1, 2]);
     });
 
+    test('does not offer a school face occupied in every column', () {
+      ScoreColumn columnWithFoursUsed() =>
+          ScoreColumn(school: {4: const ScoreEntry.scored(4)});
+      final game = GameState([
+        columnWithFoursUsed(),
+        columnWithFoursUsed(),
+        columnWithFoursUsed(),
+      ]);
+
+      final options = legalOptions(DiceRoll([4, 4, 4, 4, 1, 2]), game);
+
+      expect(
+        options.where(
+          (option) =>
+              option.type == ScoringOptionType.school && option.schoolFace == 4,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('doubles figures from hand but not school scores', () {
+      final game = GameState([
+        ScoreColumn(
+          school: {
+            1: const ScoreEntry.scored(0),
+            2: const ScoreEntry.scored(0),
+            3: const ScoreEntry.scored(0),
+          },
+        ),
+        ScoreColumn(),
+        ScoreColumn(),
+      ]);
+      final dice = DiceRoll([1, 2, 3, 4, 5, 6]);
+      final normal = legalOptions(dice, game);
+      final fromHand = legalOptions(dice, game, figuresFromHand: true);
+
+      int pointsFor(List<ScoringOption> options, ScoringOptionType type) =>
+          options
+              .firstWhere(
+                (option) =>
+                    option.columnIndex == 0 &&
+                    option.type == type &&
+                    (type == ScoringOptionType.figure
+                        ? option.figure == Figure.GREAT_STRAIGHT
+                        : option.schoolFace == 6),
+              )
+              .points;
+
+      expect(pointsFor(normal, ScoringOptionType.figure), 35);
+      expect(pointsFor(fromHand, ScoringOptionType.figure), 70);
+      expect(
+        pointsFor(fromHand, ScoringOptionType.school),
+        pointsFor(normal, ScoringOptionType.school),
+      );
+    });
+
     test('applies a scoring option to a copy of the game state', () {
       final original = GameState([ScoreColumn(), ScoreColumn(), ScoreColumn()]);
       const option = ScoringOption.school(
@@ -200,6 +256,7 @@ void main() {
       ]);
 
       expect(game.isComplete, isTrue);
+      expect(game.columns.first.perfectColumnBonus, 100);
       expect(game.total, 3 * (6 + Figure.values.length + 100));
     });
   });

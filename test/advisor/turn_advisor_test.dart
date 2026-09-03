@@ -30,7 +30,11 @@ void main() {
     });
 
     test('plans both rerolls when two rolls remain', () {
-      final game = GameState([_openColumn(), ScoreColumn(), ScoreColumn()]);
+      final game = GameState([
+        _marshalOnlyColumn(),
+        ScoreColumn(),
+        ScoreColumn(),
+      ]);
       final recommendation = const TurnAdvisor().recommend(
         dice: DiceRoll([6, 6, 6, 6, 6, 1]),
         game: game,
@@ -40,11 +44,24 @@ void main() {
       final action = recommendation!.bestMove.action as RerollAdvisorAction;
       expect(action.keptDieIndices, [0, 1, 2, 3, 4]);
       expect(action.rerolledDieIndices, [5]);
-      expect(recommendation.bestMove.expectedTurnScore, closeTo(104.44, 0.01));
+      expect(recommendation.bestMove.expectedTurnScore, closeTo(57.22, 0.01));
       expect(
         _targetProbability(recommendation.bestMove, Figure.MARSHAL),
         closeTo(11 / 36, .0001),
       );
+    });
+
+    test('scores an available figure for double points from hand', () {
+      final game = GameState([_openColumn(), ScoreColumn(), ScoreColumn()]);
+      final recommendation = const TurnAdvisor().recommend(
+        dice: DiceRoll([6, 6, 6, 6, 6, 1]),
+        game: game,
+        rollsLeft: 2,
+      );
+
+      final action = recommendation!.bestMove.action as ScoreAdvisorAction;
+      expect(action.option.figure, Figure.GENERAL);
+      expect(action.option.points, 160);
     });
 
     test('recommends the best concrete field after the final roll', () {
@@ -126,6 +143,18 @@ ScoreColumn _openColumn({bool twoPairsUsed = false}) => ScoreColumn(
     3: const ScoreEntry.scored(0),
   },
   figures: {if (twoPairsUsed) Figure.TWO_PAIRS: const ScoreEntry.scored(12)},
+);
+
+ScoreColumn _marshalOnlyColumn() => ScoreColumn(
+  school: {
+    1: const ScoreEntry.scored(0),
+    2: const ScoreEntry.scored(0),
+    3: const ScoreEntry.scored(0),
+  },
+  figures: {
+    for (final figure in Figure.values)
+      if (figure != Figure.MARSHAL) figure: const ScoreEntry.scored(1),
+  },
 );
 
 ScoreColumn _almostFilledColumn() => ScoreColumn(

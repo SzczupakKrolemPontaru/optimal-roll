@@ -13,6 +13,7 @@ class ScorecardView extends StatelessWidget {
   final VoidCallback onScored;
   final bool canScore;
   final ScoringOption? recommendedOption;
+  final bool figuresFromHand;
 
   const ScorecardView({
     super.key,
@@ -23,6 +24,7 @@ class ScorecardView extends StatelessWidget {
     required this.onScored,
     required this.canScore,
     this.recommendedOption,
+    this.figuresFromHand = false,
   });
 
   @override
@@ -94,15 +96,24 @@ class ScorecardView extends StatelessWidget {
                 ),
               ),
               TableRow(
+                decoration: BoxDecoration(color: Colors.indigo.shade50),
                 children: [
                   const Padding(
                     padding: EdgeInsets.all(8),
-                    child: Text('Figures'),
+                    child: Text(
+                      'School bonus',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                   ...gameState.columns.map(
                     (column) => Padding(
                       padding: const EdgeInsets.all(8),
-                      child: Text(column.isOpen ? 'OPEN' : 'CLOSED'),
+                      child: Center(
+                        child: Text(
+                          '+${column.schoolBonus}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -149,12 +160,36 @@ class ScorecardView extends StatelessWidget {
                             isRecommendedPijol:
                                 recommendedOption?.type ==
                                 ScoringOptionType.pijol,
+                            figuresFromHand: figuresFromHand,
                           ),
                         ),
                       ),
                     ),
                   ],
                 ),
+              ),
+              TableRow(
+                decoration: BoxDecoration(color: Colors.indigo.shade50),
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text(
+                      'No-pijol bonus',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ...gameState.columns.map(
+                    (column) => Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Center(
+                        child: Text(
+                          '+${column.perfectColumnBonus}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

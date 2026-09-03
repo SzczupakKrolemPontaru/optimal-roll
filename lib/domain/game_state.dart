@@ -43,13 +43,17 @@ class ScoreColumn {
       ? 0
       : ((rawSchoolScore - 1) ~/ SCHOOL_BONUS_THRESHOLD) * SCHOOL_BONUS_POINTS;
 
+  int get perfectColumnBonus =>
+      !hasPijol &&
+          figures.values.every((entry) => entry.status != FieldStatus.EMPTY)
+      ? PERFECT_COLUMN_BONUS
+      : 0;
+
   int get total =>
       rawSchoolScore +
       schoolBonus +
       figures.values.fold<int>(0, (sum, e) => sum + (e.points ?? 0)) +
-      (!hasPijol && figures.values.every((e) => e.status != FieldStatus.EMPTY)
-          ? PERFECT_COLUMN_BONUS
-          : 0);
+      perfectColumnBonus;
 
   ScoreColumn copy() => ScoreColumn(school: school, figures: figures);
 }

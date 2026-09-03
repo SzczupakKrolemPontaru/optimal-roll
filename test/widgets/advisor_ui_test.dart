@@ -6,6 +6,7 @@ import 'package:optimal_roll/screens/home_page.dart';
 import 'package:optimal_roll/widgets/advisor_card.dart';
 import 'package:optimal_roll/widgets/dice_roll_view.dart';
 import 'package:optimal_roll/widgets/figure_field.dart';
+import 'package:optimal_roll/widgets/figure_scores_view.dart';
 import 'package:optimal_roll/widgets/scorecard_view.dart';
 
 void main() {
@@ -125,6 +126,10 @@ void main() {
     );
 
     expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
+    expect(find.text('School bonus'), findsOneWidget);
+    expect(find.text('No-pijol bonus'), findsOneWidget);
+    expect(find.text('OPEN'), findsNothing);
+    expect(find.text('CLOSED'), findsNothing);
   });
 
   testWidgets('can apply a scoring recommendation from the Advisor card', (
@@ -200,5 +205,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(column.figures[Figure.PAIR]!.points, 4);
     expect(turnFinished, isTrue);
+  });
+
+  testWidgets('shows double figure points when rolled from hand', (
+    tester,
+  ) async {
+    final column = ScoreColumn(
+      school: {
+        1: const ScoreEntry.scored(0),
+        2: const ScoreEntry.scored(0),
+        3: const ScoreEntry.scored(0),
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FigureField(
+            column: column,
+            figure: Figure.GREAT_STRAIGHT,
+            diceRoll: DiceRoll([1, 2, 3, 4, 5, 6]),
+            onChanged: () {},
+            isColumnOpen: true,
+            onScored: () {},
+            canScore: true,
+            figuresFromHand: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('70'), findsOneWidget);
+  });
+
+  testWidgets('hides a school face occupied in every column', (tester) async {
+    ScoreColumn columnWithFoursUsed() =>
+        ScoreColumn(school: {4: const ScoreEntry.scored(4)});
+    final game = GameState([
+      columnWithFoursUsed(),
+      columnWithFoursUsed(),
+      columnWithFoursUsed(),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FigureScoresView(
+            figureScores: evaluateFigures(DiceRoll([4, 4, 4, 4, 1, 2])),
+            diceRoll: DiceRoll([4, 4, 4, 4, 1, 2]),
+            gameState: game,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('SCHOOL 4'), findsNothing);
+    expect(find.text('SCHOOL 3'), findsOneWidget);
   });
 }

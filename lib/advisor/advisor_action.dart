@@ -60,7 +60,11 @@ class AdvisorTarget {
     probability: probability,
   );
 
-  String get identity => '${type.index}:${figure?.index}:$schoolFace';
+  int get identity => switch (type) {
+    ScoringOptionType.school => schoolFace!,
+    ScoringOptionType.figure => 100 + figure!.index,
+    ScoringOptionType.pijol => 200 + figure!.index,
+  };
 }
 
 enum AdvisorReason {

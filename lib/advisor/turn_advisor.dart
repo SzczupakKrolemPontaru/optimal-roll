@@ -23,13 +23,22 @@ class TurnAdvisor {
     }
 
     final solver = _TurnSolver(game: game, scoringUtility: scoringUtility);
-    final candidates = solver.rankMoves(dice, rollsLeft);
+    final candidates = solver.rankMoves(
+      dice,
+      rollsLeft,
+      figuresFromHand: rollsLeft == 2,
+    );
     if (candidates.isEmpty) return null;
 
+    final bestMove = solver.withLikelyTargets(
+      candidates.first,
+      dice,
+      rollsLeft,
+    );
     return AdvisorRecommendation(
-      bestMove: candidates.first,
+      bestMove: bestMove,
       alternatives: candidates.skip(1).take(3).toList(growable: false),
-      reasons: _reasonsFor(candidates.first, game, rollsLeft),
+      reasons: _reasonsFor(bestMove, game, rollsLeft),
     );
   }
 
@@ -68,24 +77,27 @@ class TurnAdvisor {
 class _TurnSolver {
   final GameState game;
   final ScoringUtility scoringUtility;
-  final Map<String, _StateValue> _bestStateCache = {};
-  final Map<String, List<AdvisorMoveEvaluation>> _scoringMovesCache = {};
-  final Map<String, List<List<int>>> _keepSelectionsCache = {};
+  final Map<int, _SolvedState> _solvedStateCache = {};
+  final Map<int, List<AdvisorMoveEvaluation>> _scoringMovesCache = {};
+  final Map<int, List<List<int>>> _keepSelectionsCache = {};
   final Map<int, List<_RollOutcome>> _rollOutcomesCache = {};
+  final Map<int, List<AdvisorTarget>> _targetDistributionCache = {};
 
   _TurnSolver({required this.game, required this.scoringUtility});
 
-  List<AdvisorMoveEvaluation> rankMoves(DiceRoll dice, int rollsLeft) {
+  List<AdvisorMoveEvaluation> rankMoves(
+    DiceRoll dice,
+    int rollsLeft, {
+    bool figuresFromHand = false,
+  }) {
     final counts = dice.counts;
-    final candidates = [..._rankScoringMoves(counts)];
+    final candidates = [
+      ..._rankScoringMoves(counts, figuresFromHand: figuresFromHand),
+    ];
     if (rollsLeft > 0) {
       for (final keptCounts in _keepSelections(counts)) {
         candidates.add(
-          _evaluateReroll(
-            dice: dice,
-            keptCounts: keptCounts,
-            rollsLeft: rollsLeft,
-          ),
+          _rerollMove(dice: dice, keptCounts: keptCounts, rollsLeft: rollsLeft),
         );
       }
     }
@@ -93,81 +105,114 @@ class _TurnSolver {
     return candidates;
   }
 
-  AdvisorMoveEvaluation _evaluateReroll({
+  AdvisorMoveEvaluation withLikelyTargets(
+    AdvisorMoveEvaluation move,
+    DiceRoll dice,
+    int rollsLeft,
+  ) {
+    final targets = switch (move.action) {
+      ScoreAdvisorAction(:final option) => [
+        AdvisorTarget.fromOption(option, probability: 1),
+      ],
+      RerollAdvisorAction(:final keptDieIndices) => _targetsAfterReroll(
+        _keptCountsFromIndices(dice, keptDieIndices),
+        rollsLeft,
+      ),
+    };
+    return AdvisorMoveEvaluation(
+      action: move.action,
+      expectedTurnScore: move.expectedTurnScore,
+      strategicValue: move.strategicValue,
+      pijolRisk: move.pijolRisk,
+      likelyTargets: targets,
+    );
+  }
+
+  AdvisorMoveEvaluation _rerollMove({
     required DiceRoll dice,
     required List<int> keptCounts,
     required int rollsLeft,
   }) {
+    final value = _rerollValue(keptCounts, rollsLeft);
     final keptIndices = _indicesForKeptCounts(dice, keptCounts);
     final keptIndexSet = keptIndices.toSet();
-    final rerolledIndices = [
-      for (var index = 0; index < DICE_COUNT; index++)
-        if (!keptIndexSet.contains(index)) index,
-    ];
-
-    var expectedPoints = 0.0;
-    var expectedStrategicValue = 0.0;
-    var pijolRisk = 0.0;
-    final targetProbabilities = <String, _TargetAccumulator>{};
-    for (final outcome in _rollOutcomes(rerolledIndices.length)) {
-      final nextCounts = [
-        for (var face = 0; face < MAX_DIE_VALUE; face++)
-          keptCounts[face] + outcome.counts[face],
-      ];
-      final nextState = _bestState(nextCounts, rollsLeft - 1);
-      expectedPoints += outcome.probability * nextState.expectedTurnScore;
-      expectedStrategicValue += outcome.probability * nextState.strategicValue;
-      pijolRisk += outcome.probability * nextState.pijolRisk;
-      for (final target in nextState.likelyTargets) {
-        final accumulator = targetProbabilities.putIfAbsent(
-          target.identity,
-          () => _TargetAccumulator(target),
-        );
-        accumulator.probability += outcome.probability * target.probability;
-      }
-    }
-
     return AdvisorMoveEvaluation(
       action: RerollAdvisorAction(
         keptDieIndices: List.unmodifiable(keptIndices),
-        rerolledDieIndices: List.unmodifiable(rerolledIndices),
+        rerolledDieIndices: List.unmodifiable([
+          for (var index = 0; index < DICE_COUNT; index++)
+            if (!keptIndexSet.contains(index)) index,
+        ]),
       ),
+      expectedTurnScore: value.expectedTurnScore,
+      strategicValue: value.strategicValue,
+      pijolRisk: value.pijolRisk,
+    );
+  }
+
+  _StateValue _rerollValue(List<int> keptCounts, int rollsLeft) {
+    final rerolledCount = DICE_COUNT - _sum(keptCounts);
+    var expectedPoints = 0.0;
+    var expectedStrategicValue = 0.0;
+    var pijolRisk = 0.0;
+    for (final outcome in _rollOutcomes(rerolledCount)) {
+      final nextCounts = _combineCounts(keptCounts, outcome.counts);
+      final nextState = _solveState(nextCounts, rollsLeft - 1).value;
+      expectedPoints += outcome.probability * nextState.expectedTurnScore;
+      expectedStrategicValue += outcome.probability * nextState.strategicValue;
+      pijolRisk += outcome.probability * nextState.pijolRisk;
+    }
+    return _StateValue(
       expectedTurnScore: expectedPoints,
       strategicValue: expectedStrategicValue,
       pijolRisk: pijolRisk,
-      likelyTargets: _sortedTargets(targetProbabilities.values),
     );
   }
 
-  _StateValue _bestState(List<int> counts, int rollsLeft) {
-    final key = '$rollsLeft:${counts.join(',')}';
-    final cached = _bestStateCache[key];
+  _SolvedState _solveState(List<int> counts, int rollsLeft) {
+    final key = _stateKey(counts, rollsLeft);
+    final cached = _solvedStateCache[key];
     if (cached != null) return cached;
 
-    final dice = _diceFromCounts(counts);
-    final bestMove = rankMoves(dice, rollsLeft).first;
-    final result = _StateValue(
-      expectedTurnScore: bestMove.expectedTurnScore,
-      strategicValue: bestMove.strategicValue,
-      pijolRisk: bestMove.pijolRisk,
-      likelyTargets: bestMove.likelyTargets,
+    final scoringMove = _rankScoringMoves(counts).first;
+    var best = _StateValue.fromMove(scoringMove);
+    _StatePolicy bestPolicy = _ScorePolicy(
+      (scoringMove.action as ScoreAdvisorAction).option,
     );
-    _bestStateCache[key] = result;
+
+    if (rollsLeft > 0) {
+      for (final keptCounts in _keepSelections(counts)) {
+        final candidate = _rerollValue(keptCounts, rollsLeft);
+        if (_compareValues(candidate, best) < 0) {
+          best = candidate;
+          bestPolicy = _RerollPolicy(keptCounts);
+        }
+      }
+    }
+
+    final result = _SolvedState(value: best, policy: bestPolicy);
+    _solvedStateCache[key] = result;
     return result;
   }
 
-  List<AdvisorMoveEvaluation> _rankScoringMoves(List<int> counts) {
-    final key = counts.join(',');
+  List<AdvisorMoveEvaluation> _rankScoringMoves(
+    List<int> counts, {
+    bool figuresFromHand = false,
+  }) {
+    final key = _countsKey(counts) * 2 + (figuresFromHand ? 1 : 0);
     return _scoringMovesCache.putIfAbsent(key, () {
       final dice = _diceFromCounts(counts);
       final moves = [
-        for (final option in legalOptions(dice, game))
+        for (final option in legalOptions(
+          dice,
+          game,
+          figuresFromHand: figuresFromHand,
+        ))
           AdvisorMoveEvaluation(
             action: ScoreAdvisorAction(option),
             expectedTurnScore: option.points.toDouble(),
             strategicValue: scoringUtility.evaluate(option, game),
             pijolRisk: option.type == ScoringOptionType.pijol ? 1 : 0,
-            likelyTargets: [AdvisorTarget.fromOption(option, probability: 1)],
           ),
       ];
       moves.sort(_compareMoves);
@@ -175,8 +220,49 @@ class _TurnSolver {
     });
   }
 
+  List<AdvisorTarget> _targetsForState(List<int> counts, int rollsLeft) {
+    final key = _stateKey(counts, rollsLeft);
+    return _targetDistributionCache.putIfAbsent(key, () {
+      final solved = _solveState(counts, rollsLeft);
+      return switch (solved.policy) {
+        _ScorePolicy(:final option) => [
+          AdvisorTarget.fromOption(option, probability: 1),
+        ],
+        _RerollPolicy(:final keptCounts) => _targetsAfterReroll(
+          keptCounts,
+          rollsLeft,
+        ),
+      };
+    });
+  }
+
+  List<AdvisorTarget> _targetsAfterReroll(List<int> keptCounts, int rollsLeft) {
+    final accumulators = <int, _TargetAccumulator>{};
+    final rerolledCount = DICE_COUNT - _sum(keptCounts);
+    for (final outcome in _rollOutcomes(rerolledCount)) {
+      final nextCounts = _combineCounts(keptCounts, outcome.counts);
+      for (final target in _targetsForState(nextCounts, rollsLeft - 1)) {
+        final accumulator = accumulators.putIfAbsent(
+          target.identity,
+          () => _TargetAccumulator(target),
+        );
+        accumulator.probability += outcome.probability * target.probability;
+      }
+    }
+    final targets = [
+      for (final accumulator in accumulators.values)
+        AdvisorTarget(
+          type: accumulator.target.type,
+          figure: accumulator.target.figure,
+          schoolFace: accumulator.target.schoolFace,
+          probability: accumulator.probability,
+        ),
+    ]..sort((left, right) => right.probability.compareTo(left.probability));
+    return List.unmodifiable(targets);
+  }
+
   List<List<int>> _keepSelections(List<int> diceCounts) {
-    final key = diceCounts.join(',');
+    final key = _countsKey(diceCounts);
     return _keepSelectionsCache.putIfAbsent(key, () {
       final selections = <List<int>>[];
       final current = List.filled(MAX_DIE_VALUE, 0);
@@ -245,47 +331,65 @@ class _TurnSolver {
     return indices;
   }
 
+  List<int> _keptCountsFromIndices(DiceRoll dice, List<int> indices) {
+    final counts = List.filled(MAX_DIE_VALUE, 0);
+    for (final index in indices) {
+      counts[dice.values[index] - MIN_DIE_VALUE]++;
+    }
+    return counts;
+  }
+
+  List<int> _combineCounts(List<int> left, List<int> right) => [
+    for (var index = 0; index < MAX_DIE_VALUE; index++)
+      left[index] + right[index],
+  ];
+
   DiceRoll _diceFromCounts(List<int> counts) => DiceRoll([
     for (var faceIndex = 0; faceIndex < counts.length; faceIndex++)
       for (var count = 0; count < counts[faceIndex]; count++)
         faceIndex + MIN_DIE_VALUE,
   ]);
+}
 
-  List<AdvisorTarget> _sortedTargets(
-    Iterable<_TargetAccumulator> accumulators,
-  ) {
-    final targets = [
-      for (final accumulator in accumulators)
-        AdvisorTarget(
-          type: accumulator.target.type,
-          figure: accumulator.target.figure,
-          schoolFace: accumulator.target.schoolFace,
-          probability: accumulator.probability,
-        ),
-    ]..sort((left, right) => right.probability.compareTo(left.probability));
-    return List.unmodifiable(targets);
-  }
+sealed class _StatePolicy {
+  const _StatePolicy();
+}
+
+class _ScorePolicy extends _StatePolicy {
+  final ScoringOption option;
+
+  const _ScorePolicy(this.option);
+}
+
+class _RerollPolicy extends _StatePolicy {
+  final List<int> keptCounts;
+
+  const _RerollPolicy(this.keptCounts);
+}
+
+class _SolvedState {
+  final _StateValue value;
+  final _StatePolicy policy;
+
+  const _SolvedState({required this.value, required this.policy});
 }
 
 class _StateValue {
   final double expectedTurnScore;
   final double strategicValue;
   final double pijolRisk;
-  final List<AdvisorTarget> likelyTargets;
 
   const _StateValue({
     required this.expectedTurnScore,
     required this.strategicValue,
     required this.pijolRisk,
-    required this.likelyTargets,
   });
-}
 
-class _TargetAccumulator {
-  final AdvisorTarget target;
-  double probability = 0;
-
-  _TargetAccumulator(this.target);
+  factory _StateValue.fromMove(AdvisorMoveEvaluation move) => _StateValue(
+    expectedTurnScore: move.expectedTurnScore,
+    strategicValue: move.strategicValue,
+    pijolRisk: move.pijolRisk,
+  );
 }
 
 class _RollOutcome {
@@ -295,6 +399,26 @@ class _RollOutcome {
   const _RollOutcome({required this.counts, required this.probability});
 }
 
+class _TargetAccumulator {
+  final AdvisorTarget target;
+  double probability = 0;
+
+  _TargetAccumulator(this.target);
+}
+
+int _countsKey(List<int> counts) {
+  var key = 0;
+  for (final count in counts) {
+    key = key * (DICE_COUNT + 1) + count;
+  }
+  return key;
+}
+
+int _stateKey(List<int> counts, int rollsLeft) =>
+    _countsKey(counts) * 3 + rollsLeft;
+
+int _sum(List<int> values) => values.fold(0, (sum, value) => sum + value);
+
 int _factorial(int value) {
   var result = 1;
   for (var factor = 2; factor <= value; factor++) {
@@ -303,13 +427,20 @@ int _factorial(int value) {
   return result;
 }
 
-int _compareMoves(AdvisorMoveEvaluation left, AdvisorMoveEvaluation right) {
+int _compareValues(_StateValue left, _StateValue right) {
   final strategic = right.strategicValue.compareTo(left.strategicValue);
   if (strategic != 0) return strategic;
   final points = right.expectedTurnScore.compareTo(left.expectedTurnScore);
   if (points != 0) return points;
-  final risk = left.pijolRisk.compareTo(right.pijolRisk);
-  if (risk != 0) return risk;
+  return left.pijolRisk.compareTo(right.pijolRisk);
+}
+
+int _compareMoves(AdvisorMoveEvaluation left, AdvisorMoveEvaluation right) {
+  final values = _compareValues(
+    _StateValue.fromMove(left),
+    _StateValue.fromMove(right),
+  );
+  if (values != 0) return values;
 
   if (left.action is ScoreAdvisorAction &&
       right.action is RerollAdvisorAction) {
