@@ -9,6 +9,7 @@ class SchoolField extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback onScored;
   final bool canScore;
+  final bool isRecommended;
 
   const SchoolField({
     super.key,
@@ -18,6 +19,7 @@ class SchoolField extends StatelessWidget {
     required this.onChanged,
     required this.onScored,
     required this.canScore,
+    this.isRecommended = false,
   });
 
   @override
@@ -39,17 +41,31 @@ class SchoolField extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 64),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: selectedPoints == null
+          color: isRecommended
+              ? Colors.amber.shade100
+              : selectedPoints == null
               ? Colors.transparent
               : Colors.indigo.shade50,
           border: Border.all(
-            color: selectedPoints == null ? Colors.black26 : Colors.indigo,
+            color: isRecommended
+                ? Colors.amber.shade800
+                : selectedPoints == null
+                ? Colors.black26
+                : Colors.indigo,
+            width: isRecommended ? 3 : 1,
           ),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Text(
-          selectedPoints?.toString() ?? 'EMPTY',
-          textAlign: TextAlign.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isRecommended) ...[
+              const Icon(Icons.auto_awesome, size: 14),
+              const SizedBox(width: 3),
+            ],
+            Text(selectedPoints?.toString() ?? 'EMPTY'),
+          ],
         ),
       ),
     );
@@ -79,7 +95,6 @@ class SchoolField extends StatelessWidget {
     );
     if (action == 'score' && selectedPoints == null) {
       column.school[face] = ScoreEntry.scored(validPoints);
-      onChanged();
       onScored();
     }
     if (action == 'clear') {

@@ -10,6 +10,8 @@ class FigureField extends StatelessWidget {
   final bool isColumnOpen;
   final VoidCallback onScored;
   final bool canScore;
+  final bool isRecommended;
+  final bool isRecommendedPijol;
 
   const FigureField({
     super.key,
@@ -20,6 +22,8 @@ class FigureField extends StatelessWidget {
     required this.isColumnOpen,
     required this.onScored,
     required this.canScore,
+    this.isRecommended = false,
+    this.isRecommendedPijol = false,
   });
 
   @override
@@ -31,10 +35,19 @@ class FigureField extends StatelessWidget {
         canScore && isColumnOpen && availablePoints != null && isEmpty;
     final actionIcon = !isEmpty ? Icons.delete_outline : Icons.edit_off;
     final actionTooltip = !isEmpty ? 'Clear' : 'Pijol';
-    final actionCallback = !isEmpty ? _clear : (canScore ? _setPijol : null);
-    return SizedBox(
+    final actionCallback = !isEmpty
+        ? _clear
+        : (canScore && isColumnOpen ? _setPijol : null);
+    return Container(
       width: 72,
       height: 48,
+      decoration: BoxDecoration(
+        color: isRecommended ? Colors.amber.shade100 : null,
+        border: isRecommended
+            ? Border.all(color: Colors.amber.shade800, width: 3)
+            : null,
+        borderRadius: BorderRadius.circular(4),
+      ),
       child: Column(
         children: [
           SizedBox(
@@ -59,17 +72,34 @@ class FigureField extends StatelessWidget {
                   ? const Text('PIJOL', style: TextStyle(fontSize: 10))
                   : entry.status == FieldStatus.SCORED
                   ? Text('${entry.points}')
+                  : isRecommendedPijol
+                  ? TextButton(
+                      onPressed: actionCallback,
+                      style: _fieldButtonStyle(),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome, size: 13),
+                          SizedBox(width: 2),
+                          Text('PIJOL', style: TextStyle(fontSize: 9)),
+                        ],
+                      ),
+                    )
                   : canScoreField
                   ? TextButton(
                       onPressed: () =>
                           _showScoreDialog(context, availablePoints),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(32, 24),
-                        padding: EdgeInsets.zero,
-                        foregroundColor: Colors.grey.shade700,
-                        backgroundColor: Colors.grey.shade200,
+                      style: _fieldButtonStyle(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isRecommended) ...[
+                            const Icon(Icons.auto_awesome, size: 13),
+                            const SizedBox(width: 2),
+                          ],
+                          Text('$availablePoints'),
+                        ],
                       ),
-                      child: Text('$availablePoints'),
                     )
                   : const SizedBox.shrink(),
             ),
@@ -79,9 +109,15 @@ class FigureField extends StatelessWidget {
     );
   }
 
+  ButtonStyle _fieldButtonStyle() => TextButton.styleFrom(
+    minimumSize: const Size(32, 24),
+    padding: EdgeInsets.zero,
+    foregroundColor: Colors.grey.shade700,
+    backgroundColor: Colors.grey.shade200,
+  );
+
   void _setPijol() {
     column.figures[figure] = const ScoreEntry.pijol();
-    onChanged();
     onScored();
   }
 
@@ -111,7 +147,6 @@ class FigureField extends StatelessWidget {
     );
     if (confirmed == true) {
       column.figures[figure] = ScoreEntry.scored(points);
-      onChanged();
       onScored();
     }
   }

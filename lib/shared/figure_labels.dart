@@ -19,3 +19,8 @@ String scorecardFigureLabel(Figure figure) => switch (figure) {
   Figure.SMALL => 'M',
   Figure.CHANCE => 'Sz',
 };
+
+String figureDisplayName(Figure figure) => figure.name
+    .split('_')
+    .map((word) => '${word[0]}${word.substring(1).toLowerCase()}')
+    .join(' ');

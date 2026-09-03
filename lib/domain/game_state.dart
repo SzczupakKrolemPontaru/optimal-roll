@@ -32,6 +32,10 @@ class ScoreColumn {
 
   bool get hasPijol => figures.values.any((e) => e.status == FieldStatus.PIJOL);
 
+  bool get isComplete =>
+      school.values.every((entry) => entry.status != FieldStatus.EMPTY) &&
+      figures.values.every((entry) => entry.status != FieldStatus.EMPTY);
+
   int get rawSchoolScore =>
       school.values.fold(0, (sum, e) => sum + (e.points ?? 0));
 
@@ -46,6 +50,8 @@ class ScoreColumn {
       (!hasPijol && figures.values.every((e) => e.status != FieldStatus.EMPTY)
           ? PERFECT_COLUMN_BONUS
           : 0);
+
+  ScoreColumn copy() => ScoreColumn(school: school, figures: figures);
 }
 
 class GameState {
@@ -56,4 +62,11 @@ class GameState {
       throw ArgumentError('There must be three columns.');
     }
   }
+
+  GameState copy() =>
+      GameState(columns.map((column) => column.copy()).toList());
+
+  bool get isComplete => columns.every((column) => column.isComplete);
+
+  int get total => columns.fold(0, (sum, column) => sum + column.total);
 }

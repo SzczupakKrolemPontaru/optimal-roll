@@ -126,15 +126,81 @@ void main() {
         final gameState = GameState([openColumn, ScoreColumn(), ScoreColumn()]);
         final options = legalOptions(DiceRoll([4, 4, 4, 4, 4, 2]), gameState);
         expect(
-          options.where((option) => option.figure == Figure.GENERAL),
+          options.where(
+            (option) =>
+                option.type == ScoringOptionType.figure &&
+                option.figure == Figure.GENERAL,
+          ),
           isEmpty,
         );
         expect(
           options.where((option) => option.figure == Figure.FOUR_OF_A_KIND),
           isNotEmpty,
         );
-        expect(options.where((option) => option.figure != null).length, 5);
+        expect(
+          options
+              .where((option) => option.type == ScoringOptionType.figure)
+              .length,
+          5,
+        );
+        expect(
+          options
+              .where((option) => option.type == ScoringOptionType.pijol)
+              .length,
+          Figure.values.length - 1,
+        );
       },
     );
+
+    test('identifies the column for every scoring option', () {
+      final gameState = GameState([
+        ScoreColumn(),
+        ScoreColumn(),
+        ScoreColumn(),
+      ]);
+      final options = legalOptions(DiceRoll([1, 1, 1, 2, 3, 4]), gameState);
+
+      final schoolOnes = options.where(
+        (option) =>
+            option.type == ScoringOptionType.school && option.schoolFace == 1,
+      );
+      expect(schoolOnes.map((option) => option.columnIndex), [0, 1, 2]);
+    });
+
+    test('applies a scoring option to a copy of the game state', () {
+      final original = GameState([ScoreColumn(), ScoreColumn(), ScoreColumn()]);
+      const option = ScoringOption.school(
+        columnIndex: 1,
+        schoolFace: 4,
+        points: 8,
+      );
+
+      final result = applyScoringOption(original, option);
+
+      expect(original.columns[1].school[4]!.status, FieldStatus.EMPTY);
+      expect(result.columns[1].school[4]!.status, FieldStatus.SCORED);
+      expect(result.columns[1].school[4]!.points, 8);
+    });
+
+    test('detects a completed game and calculates its total', () {
+      ScoreColumn completedColumn() => ScoreColumn(
+        school: {
+          for (var face = 1; face <= 6; face++)
+            face: const ScoreEntry.scored(1),
+        },
+        figures: {
+          for (final figure in Figure.values)
+            figure: const ScoreEntry.scored(1),
+        },
+      );
+      final game = GameState([
+        completedColumn(),
+        completedColumn(),
+        completedColumn(),
+      ]);
+
+      expect(game.isComplete, isTrue);
+      expect(game.total, 3 * (6 + Figure.values.length + 100));
+    });
   });
 }

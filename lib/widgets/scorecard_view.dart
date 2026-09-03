@@ -12,6 +12,7 @@ class ScorecardView extends StatelessWidget {
   final VoidCallback onRestart;
   final VoidCallback onScored;
   final bool canScore;
+  final ScoringOption? recommendedOption;
 
   const ScorecardView({
     super.key,
@@ -21,6 +22,7 @@ class ScorecardView extends StatelessWidget {
     required this.onRestart,
     required this.onScored,
     required this.canScore,
+    this.recommendedOption,
   });
 
   @override
@@ -69,16 +71,22 @@ class ScorecardView extends StatelessWidget {
                         child: Text('$face', textAlign: TextAlign.center),
                       ),
                     ),
-                    ...gameState.columns.map(
-                      (column) => Padding(
+                    ...gameState.columns.asMap().entries.map(
+                      (columnEntry) => Padding(
                         padding: const EdgeInsets.all(8),
                         child: SchoolField(
-                          column: column,
+                          column: columnEntry.value,
                           face: face,
                           diceRoll: diceRoll,
                           onChanged: onChanged,
                           onScored: onScored,
                           canScore: canScore,
+                          isRecommended:
+                              recommendedOption?.type ==
+                                  ScoringOptionType.school &&
+                              recommendedOption?.columnIndex ==
+                                  columnEntry.key &&
+                              recommendedOption?.schoolFace == face,
                         ),
                       ),
                     ),
@@ -120,18 +128,27 @@ class ScorecardView extends StatelessWidget {
                         ),
                       ),
                     ),
-                    ...gameState.columns.map(
-                      (column) => Padding(
+                    ...gameState.columns.asMap().entries.map(
+                      (columnEntry) => Padding(
                         padding: EdgeInsets.zero,
                         child: Center(
                           child: FigureField(
-                            column: column,
+                            column: columnEntry.value,
                             figure: figure,
                             diceRoll: diceRoll,
                             onChanged: onChanged,
                             onScored: onScored,
                             canScore: canScore,
-                            isColumnOpen: column.isOpen,
+                            isColumnOpen: columnEntry.value.isOpen,
+                            isRecommended:
+                                recommendedOption?.columnIndex ==
+                                    columnEntry.key &&
+                                recommendedOption?.figure == figure &&
+                                recommendedOption?.type !=
+                                    ScoringOptionType.school,
+                            isRecommendedPijol:
+                                recommendedOption?.type ==
+                                ScoringOptionType.pijol,
                           ),
                         ),
                       ),
