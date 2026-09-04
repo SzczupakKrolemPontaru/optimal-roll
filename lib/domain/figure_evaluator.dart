@@ -4,6 +4,14 @@ import 'figures.dart';
 
 Map<Figure, int> evaluateFigures(DiceRoll diceRoll) {
   final diceCounts = diceRoll.counts;
+  final cacheKey = _countsKey(diceCounts);
+  return _figureScoresCache.putIfAbsent(
+    cacheKey,
+    () => Map.unmodifiable(_evaluateFigures(diceRoll, diceCounts)),
+  );
+}
+
+Map<Figure, int> _evaluateFigures(DiceRoll diceRoll, List<int> diceCounts) {
   final figureScores = <Figure, int>{};
   final pairFaces = [
     for (var faceIndex = 0; faceIndex < DICE_COUNT; faceIndex++)
@@ -90,3 +98,13 @@ Map<Figure, int> evaluateFigures(DiceRoll diceRoll) {
   figureScores[Figure.CHANCE] = diceRoll.sum;
   return figureScores;
 }
+
+int _countsKey(List<int> counts) {
+  var key = 0;
+  for (final count in counts) {
+    key = key * (DICE_COUNT + 1) + count;
+  }
+  return key;
+}
+
+final Map<int, Map<Figure, int>> _figureScoresCache = {};

@@ -9,6 +9,16 @@ class TurnAdvisor {
 
   const TurnAdvisor({this.scoringUtility = const ScoringUtility()});
 
+  AdvisorTurnSession startTurn(GameState game) => AdvisorTurnSession._(
+    _TurnSolver(game: game, scoringUtility: scoringUtility),
+  );
+
+  AdvisorAction? chooseBestAction({
+    required DiceRoll dice,
+    required GameState game,
+    required int rollsLeft,
+  }) => startTurn(game).chooseBestAction(dice: dice, rollsLeft: rollsLeft);
+
   AdvisorRecommendation? recommend({
     required DiceRoll dice,
     required GameState game,
@@ -22,7 +32,7 @@ class TurnAdvisor {
       );
     }
 
-    final solver = _TurnSolver(game: game, scoringUtility: scoringUtility);
+    final solver = startTurn(game)._solver;
     final candidates = solver.rankMoves(
       dice,
       rollsLeft,
@@ -74,13 +84,31 @@ class TurnAdvisor {
   }
 }
 
+/// Reuses the expensive dynamic-programming cache while the scorecard remains
+/// unchanged during a single turn.
+class AdvisorTurnSession {
+  final _TurnSolver _solver;
+
+  AdvisorTurnSession._(this._solver);
+
+  AdvisorAction? chooseBestAction({
+    required DiceRoll dice,
+    required int rollsLeft,
+  }) {
+    _validateRollsLeft(rollsLeft);
+    return _solver
+        .bestMove(dice, rollsLeft, figuresFromHand: rollsLeft == 2)
+        ?.action;
+  }
+}
+
 class _TurnSolver {
   final GameState game;
   final ScoringUtility scoringUtility;
   final Map<int, _SolvedState> _solvedStateCache = {};
   final Map<int, List<AdvisorMoveEvaluation>> _scoringMovesCache = {};
-  final Map<int, List<List<int>>> _keepSelectionsCache = {};
-  final Map<int, List<_RollOutcome>> _rollOutcomesCache = {};
+  final Map<int, AdvisorMoveEvaluation> _bestScoringMoveCache = {};
+  final Map<int, _StateValue> _rerollValueCache = {};
   final Map<int, List<AdvisorTarget>> _targetDistributionCache = {};
 
   _TurnSolver({required this.game, required this.scoringUtility});
@@ -103,6 +131,32 @@ class _TurnSolver {
     }
     candidates.sort(_compareMoves);
     return candidates;
+  }
+
+  AdvisorMoveEvaluation? bestMove(
+    DiceRoll dice,
+    int rollsLeft, {
+    bool figuresFromHand = false,
+  }) {
+    final counts = dice.counts;
+    AdvisorMoveEvaluation? best = _bestScoringMove(
+      counts,
+      figuresFromHand: figuresFromHand,
+    );
+
+    if (rollsLeft > 0) {
+      for (final keptCounts in _keepSelections(counts)) {
+        final candidate = _rerollMove(
+          dice: dice,
+          keptCounts: keptCounts,
+          rollsLeft: rollsLeft,
+        );
+        if (best == null || _compareMoves(candidate, best) < 0) {
+          best = candidate;
+        }
+      }
+    }
+    return best;
   }
 
   AdvisorMoveEvaluation withLikelyTargets(
@@ -151,6 +205,10 @@ class _TurnSolver {
   }
 
   _StateValue _rerollValue(List<int> keptCounts, int rollsLeft) {
+    final cacheKey = _stateKey(keptCounts, rollsLeft);
+    final cached = _rerollValueCache[cacheKey];
+    if (cached != null) return cached;
+
     final rerolledCount = DICE_COUNT - _sum(keptCounts);
     var expectedPoints = 0.0;
     var expectedStrategicValue = 0.0;
@@ -162,11 +220,13 @@ class _TurnSolver {
       expectedStrategicValue += outcome.probability * nextState.strategicValue;
       pijolRisk += outcome.probability * nextState.pijolRisk;
     }
-    return _StateValue(
+    final result = _StateValue(
       expectedTurnScore: expectedPoints,
       strategicValue: expectedStrategicValue,
       pijolRisk: pijolRisk,
     );
+    _rerollValueCache[cacheKey] = result;
+    return result;
   }
 
   _SolvedState _solveState(List<int> counts, int rollsLeft) {
@@ -174,7 +234,7 @@ class _TurnSolver {
     final cached = _solvedStateCache[key];
     if (cached != null) return cached;
 
-    final scoringMove = _rankScoringMoves(counts).first;
+    final scoringMove = _bestScoringMove(counts)!;
     var best = _StateValue.fromMove(scoringMove);
     _StatePolicy bestPolicy = _ScorePolicy(
       (scoringMove.action as ScoreAdvisorAction).option,
@@ -220,6 +280,35 @@ class _TurnSolver {
     });
   }
 
+  AdvisorMoveEvaluation? _bestScoringMove(
+    List<int> counts, {
+    bool figuresFromHand = false,
+  }) {
+    final key = _countsKey(counts) * 2 + (figuresFromHand ? 1 : 0);
+    final cached = _bestScoringMoveCache[key];
+    if (cached != null) return cached;
+
+    final dice = _diceFromCounts(counts);
+    AdvisorMoveEvaluation? best;
+    for (final option in legalOptions(
+      dice,
+      game,
+      figuresFromHand: figuresFromHand,
+    )) {
+      final candidate = AdvisorMoveEvaluation(
+        action: ScoreAdvisorAction(option),
+        expectedTurnScore: option.points.toDouble(),
+        strategicValue: scoringUtility.evaluate(option, game),
+        pijolRisk: option.type == ScoringOptionType.pijol ? 1 : 0,
+      );
+      if (best == null || _compareMoves(candidate, best) < 0) {
+        best = candidate;
+      }
+    }
+    if (best != null) _bestScoringMoveCache[key] = best;
+    return best;
+  }
+
   List<AdvisorTarget> _targetsForState(List<int> counts, int rollsLeft) {
     final key = _stateKey(counts, rollsLeft);
     return _targetDistributionCache.putIfAbsent(key, () {
@@ -263,7 +352,7 @@ class _TurnSolver {
 
   List<List<int>> _keepSelections(List<int> diceCounts) {
     final key = _countsKey(diceCounts);
-    return _keepSelectionsCache.putIfAbsent(key, () {
+    return _sharedKeepSelectionsCache.putIfAbsent(key, () {
       final selections = <List<int>>[];
       final current = List.filled(MAX_DIE_VALUE, 0);
 
@@ -285,7 +374,7 @@ class _TurnSolver {
     });
   }
 
-  List<_RollOutcome> _rollOutcomes(int diceCount) => _rollOutcomesCache
+  List<_RollOutcome> _rollOutcomes(int diceCount) => _sharedRollOutcomesCache
       .putIfAbsent(diceCount, () => _generateRollOutcomes(diceCount));
 
   List<_RollOutcome> _generateRollOutcomes(int diceCount) {
@@ -426,6 +515,19 @@ int _factorial(int value) {
   }
   return result;
 }
+
+void _validateRollsLeft(int rollsLeft) {
+  if (rollsLeft < 0 || rollsLeft > 2) {
+    throw ArgumentError.value(
+      rollsLeft,
+      'rollsLeft',
+      'The turn Advisor supports zero, one, or two remaining rolls.',
+    );
+  }
+}
+
+final Map<int, List<List<int>>> _sharedKeepSelectionsCache = {};
+final Map<int, List<_RollOutcome>> _sharedRollOutcomesCache = {};
 
 int _compareValues(_StateValue left, _StateValue right) {
   final strategic = right.strategicValue.compareTo(left.strategicValue);

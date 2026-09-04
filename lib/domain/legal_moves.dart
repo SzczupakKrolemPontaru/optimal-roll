@@ -11,6 +11,7 @@ List<ScoringOption> legalOptions(
   bool figuresFromHand = false,
 }) {
   final options = <ScoringOption>[];
+  final counts = dice.counts;
   final figures = evaluateFigures(dice);
   for (final columnEntry in game.columns.asMap().entries) {
     final columnIndex = columnEntry.key;
@@ -21,7 +22,7 @@ List<ScoringOption> legalOptions(
           ScoringOption.school(
             columnIndex: columnIndex,
             schoolFace: face,
-            points: (dice.counts[face - 1] - SCHOOL_NEUTRAL_COUNT) * face,
+            points: (counts[face - 1] - SCHOOL_NEUTRAL_COUNT) * face,
           ),
         );
       }

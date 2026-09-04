@@ -18,8 +18,16 @@ class ScoringUtility {
         final usedSchoolFields = column.school.values
             .where((entry) => entry.status != FieldStatus.EMPTY)
             .length;
+        final completionProgress = usedSchoolFields / column.school.length;
+        value +=
+            option.points *
+            weights.schoolBonusProgressWeight *
+            completionProgress;
         if (!column.isOpen && usedSchoolFields == SCHOOL_NEUTRAL_COUNT - 1) {
           value += weights.openingColumnValue;
+        }
+        if (usedSchoolFields == column.school.length - 1) {
+          value += weights.schoolCompletionValue;
         }
       case ScoringOptionType.figure:
         value -= weights.fieldOpportunityCosts[option.figure] ?? 0;
@@ -28,7 +36,7 @@ class ScoringUtility {
         }
       case ScoringOptionType.pijol:
         value -= weights.pijolBaseCost;
-        value -= weights.fieldOpportunityCosts[option.figure] ?? 0;
+        value -= weights.pijolFieldCosts[option.figure] ?? 0;
         if (!column.hasPijol) value -= weights.perfectColumnRiskCost;
     }
     return value;

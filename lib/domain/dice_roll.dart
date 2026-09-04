@@ -10,10 +10,10 @@ class DiceRoll {
     }
   }
 
-  List<int> get counts => [
+  late final List<int> counts = List.unmodifiable([
     for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
       values.where((v) => v == face).length,
-  ];
+  ]);
 
-  int get sum => values.fold(0, (sum, value) => sum + value);
+  late final int sum = values.fold(0, (sum, value) => sum + value);
 }

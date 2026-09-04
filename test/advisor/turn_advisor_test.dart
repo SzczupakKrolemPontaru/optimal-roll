@@ -18,14 +18,14 @@ void main() {
       final reroll = action as RerollAdvisorAction;
       expect(reroll.keptDieIndices, [0, 1, 2, 3, 4]);
       expect(reroll.rerolledDieIndices, [5]);
-      expect(recommendation.bestMove.expectedTurnScore, closeTo(93.33, 0.01));
+      expect(recommendation.bestMove.expectedTurnScore, closeTo(36.67, 0.01));
       expect(
         _targetProbability(recommendation.bestMove, Figure.MARSHAL),
         closeTo(1 / 6, .0001),
       );
       expect(
-        _targetProbability(recommendation.bestMove, Figure.GENERAL),
-        closeTo(5 / 6, .0001),
+        recommendation.bestMove.likelyTargets.map((target) => target.figure),
+        isNot(contains(Figure.GENERAL)),
       );
     });
 
@@ -128,6 +128,29 @@ void main() {
       expect(action.option.figure, Figure.GENERAL);
       expect(bestMove.pijolRisk, 1);
     });
+
+    test(
+      'fast turn session chooses the same action as full recommendation',
+      () {
+        final game = GameState([_openColumn(), ScoreColumn(), ScoreColumn()]);
+        final dice = DiceRoll([6, 6, 6, 6, 6, 1]);
+        const advisor = TurnAdvisor();
+
+        final fullAction = advisor
+            .recommend(dice: dice, game: game, rollsLeft: 1)!
+            .bestMove
+            .action;
+        final fastAction = advisor
+            .startTurn(game)
+            .chooseBestAction(dice: dice, rollsLeft: 1);
+
+        expect(fastAction.runtimeType, fullAction.runtimeType);
+        final fullReroll = fullAction as RerollAdvisorAction;
+        final fastReroll = fastAction as RerollAdvisorAction;
+        expect(fastReroll.keptDieIndices, fullReroll.keptDieIndices);
+        expect(fastReroll.rerolledDieIndices, fullReroll.rerolledDieIndices);
+      },
+    );
   });
 }
 
