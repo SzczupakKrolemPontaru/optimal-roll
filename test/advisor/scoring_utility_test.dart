@@ -3,14 +3,22 @@ import 'package:optimal_roll/advisor/advisor.dart';
 import 'package:optimal_roll/domain/game_engine.dart';
 
 void main() {
-  test('production defaults use the validated candidate-v3 profile', () {
+  test('production defaults use the validated wide candidate profile', () {
     const weights = AdvisorWeights();
+
+    expect(weights.openingColumnValue, 34.31023154115867);
+    expect(weights.chanceCostEarly, 47.513850050906086);
+    expect(weights.schoolBonusProgressWeight, 5.422685406811303);
+    expect(weights.pijolFieldCosts[Figure.PAIR], 67.69151281052419);
+    expect(weights.pijolFieldCosts[Figure.GREAT_STRAIGHT], 60.07835004457932);
+    expect(weights.pijolFieldCosts[Figure.CHANCE], 141.89136148249204);
+  });
+
+  test('keeps candidate-v3 as a reproducible calibration baseline', () {
+    const weights = AdvisorWeights.candidateV3;
 
     expect(weights.openingColumnValue, 22.508624280927165);
     expect(weights.chanceCostEarly, 45);
-    expect(weights.schoolBonusProgressWeight, 4.8035137570367406);
-    expect(weights.pijolFieldCosts[Figure.PAIR], 91.19002870430332);
-    expect(weights.pijolFieldCosts[Figure.GREAT_STRAIGHT], 97.78227797712131);
     expect(weights.pijolFieldCosts[Figure.CHANCE], 91.97612050144282);
   });
 

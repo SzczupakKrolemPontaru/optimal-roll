@@ -26,6 +26,112 @@ PijolFigureGroup pijolGroupFor(Figure figure) => switch (figure) {
   Figure.CHANCE => PijolFigureGroup.chance,
 };
 
+class AdvisorWeightSearchSpace {
+  final double openingColumnValueMax;
+  final double chanceCostEarlyMax;
+  final double chanceCostLateMax;
+  final double pijolBaseCostMax;
+  final double perfectColumnRiskCostMax;
+  final double schoolBonusProgressWeightMax;
+  final double schoolCompletionValueMax;
+  final double pijolGroupCostMax;
+
+  const AdvisorWeightSearchSpace({
+    required this.openingColumnValueMax,
+    required this.chanceCostEarlyMax,
+    required this.chanceCostLateMax,
+    required this.pijolBaseCostMax,
+    required this.perfectColumnRiskCostMax,
+    required this.schoolBonusProgressWeightMax,
+    required this.schoolCompletionValueMax,
+    required this.pijolGroupCostMax,
+  });
+
+  static const standard = AdvisorWeightSearchSpace(
+    openingColumnValueMax: 40,
+    chanceCostEarlyMax: 45,
+    chanceCostLateMax: 30,
+    pijolBaseCostMax: 60,
+    perfectColumnRiskCostMax: 160,
+    schoolBonusProgressWeightMax: 5,
+    schoolCompletionValueMax: 40,
+    pijolGroupCostMax: 100,
+  );
+
+  static const wide = AdvisorWeightSearchSpace(
+    openingColumnValueMax: 60,
+    chanceCostEarlyMax: 90,
+    chanceCostLateMax: 60,
+    pijolBaseCostMax: 90,
+    perfectColumnRiskCostMax: 320,
+    schoolBonusProgressWeightMax: 10,
+    schoolCompletionValueMax: 80,
+    pijolGroupCostMax: 200,
+  );
+
+  List<String> boundaryHits(
+    AdvisorWeightCandidate candidate, {
+    double tolerance = .02,
+  }) {
+    final hits = <String>[];
+    void addIfClose(String name, double value, double maximum) {
+      if (maximum <= 0) return;
+      if (value >= maximum * (1 - tolerance)) {
+        hits.add(
+          '$name=${value.toStringAsFixed(2)}/${maximum.toStringAsFixed(2)}',
+        );
+      }
+    }
+
+    addIfClose(
+      'openingColumnValue',
+      candidate.openingColumnValue,
+      openingColumnValueMax,
+    );
+    addIfClose(
+      'chanceCostEarly',
+      candidate.chanceCostEarly,
+      chanceCostEarlyMax,
+    );
+    addIfClose('chanceCostLate', candidate.chanceCostLate, chanceCostLateMax);
+    addIfClose('pijolBaseCost', candidate.pijolBaseCost, pijolBaseCostMax);
+    addIfClose(
+      'perfectColumnRiskCost',
+      candidate.perfectColumnRiskCost,
+      perfectColumnRiskCostMax,
+    );
+    addIfClose(
+      'schoolBonusProgressWeight',
+      candidate.schoolBonusProgressWeight,
+      schoolBonusProgressWeightMax,
+    );
+    addIfClose(
+      'schoolCompletionValue',
+      candidate.schoolCompletionValue,
+      schoolCompletionValueMax,
+    );
+    for (final group in PijolFigureGroup.values) {
+      addIfClose(
+        'pijolGroupCosts.${group.name}',
+        candidate.pijolGroupCosts[group] ?? 0,
+        pijolGroupCostMax,
+      );
+    }
+    return hits;
+  }
+
+  Map<String, double> toJson() => {
+    'openingColumnValueMax': openingColumnValueMax,
+    'chanceCostEarlyMax': chanceCostEarlyMax,
+    'chanceCostLateMax': chanceCostLateMax,
+    'pijolBaseCostMax': pijolBaseCostMax,
+    'perfectColumnRiskCostMax': perfectColumnRiskCostMax,
+    'schoolBonusProgressWeightMax': schoolBonusProgressWeightMax,
+    'schoolCompletionValueMax': schoolCompletionValueMax,
+    'pijolGroupCostMax': pijolGroupCostMax,
+  };
+}
+
 class AdvisorWeightCandidate {
   final double openingColumnValue;
   final double chanceCostEarly;
@@ -182,6 +288,7 @@ class WeightOptimizerOptions {
   final int firstTestSeed;
   final int workers;
   final int optimizerSeed;
+  final AdvisorWeightSearchSpace searchSpace;
 
   const WeightOptimizerOptions({
     this.populationSize = 6,
@@ -196,6 +303,7 @@ class WeightOptimizerOptions {
     this.firstTestSeed = 2000001,
     this.workers = 1,
     this.optimizerSeed = 20260903,
+    this.searchSpace = AdvisorWeightSearchSpace.standard,
   });
 
   void validate() {
@@ -229,7 +337,7 @@ class WeightOptimizerOptions {
     }
   }
 
-  Map<String, int> toJson() => {
+  Map<String, Object> toJson() => {
     'populationSize': populationSize,
     'generations': generations,
     'minimumTrainingGames': minimumTrainingGames,
@@ -242,6 +350,7 @@ class WeightOptimizerOptions {
     'firstTestSeed': firstTestSeed,
     'workers': workers,
     'optimizerSeed': optimizerSeed,
+    'searchSpace': searchSpace.toJson(),
   };
 }
 
@@ -361,7 +470,11 @@ class AdvisorWeightOptimizer {
   }) async {
     options.validate();
     final random = Random(options.optimizerSeed);
-    var population = _initialPopulation(options.populationSize, random);
+    var population = _initialPopulation(
+      options.populationSize,
+      random,
+      options.searchSpace,
+    );
     final reportCache = <String, SimulationReport>{};
     final bestScoreByGeneration = <double>[];
     var finalRanking = <_EvaluatedCandidate>[];
@@ -429,6 +542,7 @@ class AdvisorWeightOptimizer {
           generation,
           options.generations,
           random,
+          options.searchSpace,
         );
       }
     }
@@ -514,10 +628,15 @@ class _EvaluatedCandidate {
   const _EvaluatedCandidate(this.candidate, this.report);
 }
 
-List<AdvisorWeightCandidate> _initialPopulation(int size, Random random) => [
+List<AdvisorWeightCandidate> _initialPopulation(
+  int size,
+  Random random,
+  AdvisorWeightSearchSpace searchSpace,
+) => [
   AdvisorWeightCandidate.defaults(),
   AdvisorWeightCandidate.zero(),
-  for (var index = 2; index < size; index++) _randomCandidate(random),
+  for (var index = 2; index < size; index++)
+    _randomCandidate(random, searchSpace),
 ];
 
 int _trainingGamesForGeneration(
@@ -558,6 +677,7 @@ List<AdvisorWeightCandidate> _nextGeneration(
   int generation,
   int generationCount,
   Random random,
+  AdvisorWeightSearchSpace searchSpace,
 ) {
   final eliteCount = max(2, populationSize ~/ 4);
   final elites = evaluated.take(eliteCount).toList();
@@ -572,55 +692,87 @@ List<AdvisorWeightCandidate> _nextGeneration(
         elites[random.nextInt(elites.length)].candidate,
         random,
         mutationScale,
+        searchSpace,
       ),
   ];
 }
 
-AdvisorWeightCandidate _randomCandidate(Random random) =>
-    AdvisorWeightCandidate(
-      openingColumnValue: random.nextDouble() * 40,
-      chanceCostEarly: random.nextDouble() * 45,
-      chanceCostLate: random.nextDouble() * 30,
-      pijolBaseCost: random.nextDouble() * 60,
-      perfectColumnRiskCost: random.nextDouble() * 160,
-      schoolBonusProgressWeight: random.nextDouble() * 5,
-      schoolCompletionValue: random.nextDouble() * 40,
-      pijolGroupCosts: {
-        for (final group in PijolFigureGroup.values)
-          group: random.nextDouble() * 100,
-      },
-    );
+AdvisorWeightCandidate _randomCandidate(
+  Random random,
+  AdvisorWeightSearchSpace searchSpace,
+) => AdvisorWeightCandidate(
+  openingColumnValue: random.nextDouble() * searchSpace.openingColumnValueMax,
+  chanceCostEarly: random.nextDouble() * searchSpace.chanceCostEarlyMax,
+  chanceCostLate: random.nextDouble() * searchSpace.chanceCostLateMax,
+  pijolBaseCost: random.nextDouble() * searchSpace.pijolBaseCostMax,
+  perfectColumnRiskCost:
+      random.nextDouble() * searchSpace.perfectColumnRiskCostMax,
+  schoolBonusProgressWeight:
+      random.nextDouble() * searchSpace.schoolBonusProgressWeightMax,
+  schoolCompletionValue:
+      random.nextDouble() * searchSpace.schoolCompletionValueMax,
+  pijolGroupCosts: {
+    for (final group in PijolFigureGroup.values)
+      group: random.nextDouble() * searchSpace.pijolGroupCostMax,
+  },
+);
 
 AdvisorWeightCandidate _mutate(
   AdvisorWeightCandidate parent,
   Random random,
   double scale,
+  AdvisorWeightSearchSpace searchSpace,
 ) => AdvisorWeightCandidate(
-  openingColumnValue: _mutated(parent.openingColumnValue, 40, random, scale),
-  chanceCostEarly: _mutated(parent.chanceCostEarly, 45, random, scale),
-  chanceCostLate: _mutated(parent.chanceCostLate, 30, random, scale),
-  pijolBaseCost: _mutated(parent.pijolBaseCost, 60, random, scale),
+  openingColumnValue: _mutated(
+    parent.openingColumnValue,
+    searchSpace.openingColumnValueMax,
+    random,
+    scale,
+  ),
+  chanceCostEarly: _mutated(
+    parent.chanceCostEarly,
+    searchSpace.chanceCostEarlyMax,
+    random,
+    scale,
+  ),
+  chanceCostLate: _mutated(
+    parent.chanceCostLate,
+    searchSpace.chanceCostLateMax,
+    random,
+    scale,
+  ),
+  pijolBaseCost: _mutated(
+    parent.pijolBaseCost,
+    searchSpace.pijolBaseCostMax,
+    random,
+    scale,
+  ),
   perfectColumnRiskCost: _mutated(
     parent.perfectColumnRiskCost,
-    160,
+    searchSpace.perfectColumnRiskCostMax,
     random,
     scale,
   ),
   schoolBonusProgressWeight: _mutated(
     parent.schoolBonusProgressWeight,
-    5,
+    searchSpace.schoolBonusProgressWeightMax,
     random,
     scale,
   ),
   schoolCompletionValue: _mutated(
     parent.schoolCompletionValue,
-    40,
+    searchSpace.schoolCompletionValueMax,
     random,
     scale,
   ),
   pijolGroupCosts: {
     for (final group in PijolFigureGroup.values)
-      group: _mutated(parent.pijolGroupCosts[group] ?? 0, 100, random, scale),
+      group: _mutated(
+        parent.pijolGroupCosts[group] ?? 0,
+        searchSpace.pijolGroupCostMax,
+        random,
+        scale,
+      ),
   },
 );
 

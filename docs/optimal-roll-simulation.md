@@ -114,6 +114,7 @@ dart run tool/optimize_advisor_weights.dart `
   --test-games 2000 `
   --workers 8 `
   --seed 10000 `
+  --search-space wide `
   --profile-name advisor-weights-v2 `
   --output tool/results/advisor-weights-v2.json
 ```
@@ -124,7 +125,43 @@ works. They do not produce statistically useful weights.
 When a surviving profile advances to a larger training sample, previously
 simulated seeds are reused and only the additional games are calculated. The
 JSON result stores all finalists, their paired validation comparisons, the
-blind test result and the final adoption decision.
+blind test result, search-space bounds and the final adoption decision. The CLI
+also prints any selected weights that landed close to the configured search
+boundaries.
+
+The `standard` search space preserves the original optimizer bounds. The
+`wide` search space doubles the most important ceilings and should be used
+after a good profile lands near a boundary. Candidate-v3 hit or nearly hit
+several standard bounds, including early Chance cost, school progress value,
+straight pijol opportunity cost and perfect-column risk. Future serious runs
+should therefore use `--search-space wide` and fresh seed ranges instead of
+reusing the candidate-v3 test seeds.
+
+For faster exploration, use the multi-start tuner. It runs several shorter
+independent optimizer starts, stores every start as JSON and compares the best
+winners once on a shared holdout:
+
+```powershell
+dart run tool/tune_advisor_weights.dart `
+  --starts 4 `
+  --population 10 `
+  --generations 5 `
+  --min-training-games 10 `
+  --training-games 100 `
+  --finalists 3 `
+  --validation-games 200 `
+  --exploratory-test-games 30 `
+  --holdout-finalists 3 `
+  --holdout-games 1000 `
+  --workers 12 `
+  --search-space wide `
+  --profile-prefix advisor-tune-1800-v1 `
+  --output-dir tool/results/tuning-1800-v1
+```
+
+This workflow is intended to find promising candidates quickly. A holdout
+winner should still be tested again on fresh seeds before adoption, because the
+shared holdout also influences finalist selection.
 
 ## Interpreting results
 
@@ -192,3 +229,22 @@ The previous defaults remain available as `AdvisorWeights.baselineV1` for
 reproducible comparisons. The complete experiment, including all finalist
 weights and score distributions, is stored in
 `tool/results/advisor-weights-candidate-v3.json`.
+
+## Adopted wide candidate-v1 calibration
+
+Candidate-v3 landed at or near several standard optimizer bounds, so the next
+production calibration used the `wide` search space on fresh seeds. The run
+used 16 candidates over 8 generations, progressive training from 20 to 250
+games, four finalists, 500 validation games per finalist and a 2,000-game
+blind test against the then-current defaults.
+
+The selected profile averaged 1,528.98 points on validation and beat the
+candidate-v3 defaults by `17.69 +/- 10.97` paired points. On the untouched
+blind test it improved by `13.49 +/- 5.30` paired points, so the complete 95%
+confidence interval was above zero and the profile passed the adoption gate.
+
+The adopted weights are now used by `const AdvisorWeights()`. The previous
+simulation-calibrated profile remains available as `AdvisorWeights.candidateV3`,
+and the original pre-calibration values remain available as
+`AdvisorWeights.baselineV1`. The complete experiment is stored in
+`tool/results/advisor-weights-wide-candidate-v1.json`.

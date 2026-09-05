@@ -21,6 +21,7 @@ Future<void> main(List<String> arguments) async {
     'Validation: ${options.finalists} finalists x ${options.validationGames} '
     'games; blind test: ${options.testGames} games; workers: ${options.workers}',
   );
+  print('Search space: ${options.searchSpaceName}');
 
   final result = await const AdvisorWeightOptimizer().optimize(
     profileName: options.profileName,
@@ -37,6 +38,7 @@ Future<void> main(List<String> arguments) async {
       firstTestSeed: options.seed + 2000000,
       workers: options.workers,
       optimizerSeed: options.optimizerSeed,
+      searchSpace: options.searchSpace,
     ),
     onProgress: (progress) {
       final cacheLabel = progress.cached ? ', reused prior games' : '';
@@ -86,6 +88,11 @@ Future<void> main(List<String> arguments) async {
   print(
     const JsonEncoder.withIndent('  ').convert(result.bestCandidate.toJson()),
   );
+  final boundaryHits = options.searchSpace.boundaryHits(result.bestCandidate);
+  print(
+    'Search-space boundary hits: '
+    '${boundaryHits.isEmpty ? 'none' : boundaryHits.join(', ')}',
+  );
 
   if (options.outputPath != null) {
     final file = File(options.outputPath!);
@@ -114,6 +121,7 @@ Options:
   --optimizer-seed <value>    Reproduces candidate mutations (default: 20260903)
   --workers <count>           Parallel game isolates (default: 1)
   --profile-name <name>       Name stored in the result (default: optimized-v2)
+  --search-space <name>       standard or wide bounds (default: standard)
   --output <path>             Save the winning profile and reports as JSON
   --help                      Show this help
 
@@ -134,6 +142,8 @@ class _Options {
   final int optimizerSeed;
   final int workers;
   final String profileName;
+  final String searchSpaceName;
+  final AdvisorWeightSearchSpace searchSpace;
   final String? outputPath;
   final bool showHelp;
 
@@ -149,6 +159,8 @@ class _Options {
     required this.optimizerSeed,
     required this.workers,
     required this.profileName,
+    required this.searchSpaceName,
+    required this.searchSpace,
     required this.outputPath,
     required this.showHelp,
   });
@@ -165,6 +177,7 @@ class _Options {
     var optimizerSeed = 20260903;
     var workers = 1;
     var profileName = 'optimized-v2';
+    var searchSpaceName = 'standard';
     String? outputPath;
     var showHelp = false;
 
@@ -195,6 +208,8 @@ class _Options {
           workers = int.parse(_nextValue(arguments, ++index, argument));
         case '--profile-name':
           profileName = _nextValue(arguments, ++index, argument);
+        case '--search-space':
+          searchSpaceName = _nextValue(arguments, ++index, argument);
         case '--output':
           outputPath = _nextValue(arguments, ++index, argument);
         case '--help' || '-h':
@@ -218,6 +233,7 @@ class _Options {
         'count, and finalists cannot exceed the population.',
       );
     }
+    final searchSpace = _parseSearchSpace(searchSpaceName);
     return _Options(
       population: population,
       generations: generations,
@@ -230,11 +246,21 @@ class _Options {
       optimizerSeed: optimizerSeed,
       workers: workers,
       profileName: profileName,
+      searchSpaceName: searchSpaceName,
+      searchSpace: searchSpace,
       outputPath: outputPath,
       showHelp: showHelp,
     );
   }
 }
+
+AdvisorWeightSearchSpace _parseSearchSpace(String name) => switch (name) {
+  'standard' => AdvisorWeightSearchSpace.standard,
+  'wide' => AdvisorWeightSearchSpace.wide,
+  _ => throw FormatException(
+    'Unknown search space: $name. Expected standard or wide.',
+  ),
+};
 
 String _nextValue(List<String> arguments, int index, String option) {
   if (index >= arguments.length) {

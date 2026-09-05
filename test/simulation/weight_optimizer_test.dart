@@ -50,6 +50,10 @@ void main() {
       );
       expect(result.toJson()['profileVersion'], 2);
       expect(result.toJson()['profileName'], 'optimized-v2');
+      expect(
+        (result.toJson()['experiment'] as Map<String, Object>)['searchSpace'],
+        AdvisorWeightSearchSpace.standard.toJson(),
+      );
     },
   );
 
@@ -71,6 +75,23 @@ void main() {
     expect(decoded.weights.pijolFieldCosts[Figure.MARSHAL], 25);
     expect(decoded.weights.pijolFieldCosts[Figure.CHANCE], 60);
     expect(decoded.weights.pijolFieldCosts[Figure.PAIR], 0);
+  });
+
+  test('reports candidate values close to search-space limits', () {
+    const candidate = AdvisorWeightCandidate(
+      openingColumnValue: 60,
+      chanceCostEarly: 88.5,
+      chanceCostLate: 10,
+      pijolBaseCost: 20,
+      perfectColumnRiskCost: 100,
+      pijolGroupCosts: {PijolFigureGroup.straight: 199},
+    );
+
+    expect(AdvisorWeightSearchSpace.wide.boundaryHits(candidate), [
+      'openingColumnValue=60.00/60.00',
+      'chanceCostEarly=88.50/90.00',
+      'pijolGroupCosts.straight=199.00/200.00',
+    ]);
   });
 
   test('increases the shared training sample across generations', () async {
