@@ -8,7 +8,13 @@ class AdvisorWeights {
   final double perfectColumnRiskCost;
   final double schoolBonusProgressWeight;
   final double schoolCompletionValue;
+  final double futureFieldValueWeight;
+  final double earlyGameRiskMultiplier;
+  final double middleGameRiskMultiplier;
+  final double lateGameRiskMultiplier;
+  final double pijolScarcityWeight;
   final Map<Figure, double> fieldOpportunityCosts;
+  final Map<int, double> schoolFaceOpportunityCosts;
   final Map<Figure, double> pijolFieldCosts;
 
   /// Weights used before the first statistically validated calibration.
@@ -23,11 +29,17 @@ class AdvisorWeights {
     perfectColumnRiskCost: 40,
     schoolBonusProgressWeight: 0,
     schoolCompletionValue: 0,
+    futureFieldValueWeight: 0,
+    earlyGameRiskMultiplier: 1,
+    middleGameRiskMultiplier: 1,
+    lateGameRiskMultiplier: 1,
+    pijolScarcityWeight: 0,
     fieldOpportunityCosts: {},
+    schoolFaceOpportunityCosts: {},
     pijolFieldCosts: {},
   );
 
-  /// First adopted simulation-calibrated profile.
+  /// Earlier adopted simulation-calibrated profile, retained for comparison.
   static const candidateV3 = AdvisorWeights(
     openingColumnValue: 22.508624280927165,
     chanceCostEarly: 45,
@@ -36,7 +48,13 @@ class AdvisorWeights {
     perfectColumnRiskCost: 150.36227752446024,
     schoolBonusProgressWeight: 4.8035137570367406,
     schoolCompletionValue: 2.390856021180171,
+    futureFieldValueWeight: 0,
+    earlyGameRiskMultiplier: 1,
+    middleGameRiskMultiplier: 1,
+    lateGameRiskMultiplier: 1,
+    pijolScarcityWeight: 0,
     fieldOpportunityCosts: {},
+    schoolFaceOpportunityCosts: {},
     pijolFieldCosts: {
       Figure.PAIR: 91.19002870430332,
       Figure.TWO_PAIRS: 91.19002870430332,
@@ -59,32 +77,56 @@ class AdvisorWeights {
   );
 
   const AdvisorWeights({
-    this.openingColumnValue = 34.31023154115867,
-    this.chanceCostEarly = 47.513850050906086,
-    this.chanceCostLate = 27.8088324989341,
+    this.openingColumnValue = 36.64490059669705,
+    this.chanceCostEarly = 32.385866293107256,
+    this.chanceCostLate = 27.4009005750395,
     this.pijolBaseCost = 0,
-    this.perfectColumnRiskCost = 55.08930141267315,
-    this.schoolBonusProgressWeight = 5.422685406811303,
+    this.perfectColumnRiskCost = 30.585530569306638,
+    this.schoolBonusProgressWeight = 4.211398428698021,
     this.schoolCompletionValue = 0,
-    this.fieldOpportunityCosts = const {},
+    this.futureFieldValueWeight = 0,
+    this.earlyGameRiskMultiplier = 0.9187242999670457,
+    this.middleGameRiskMultiplier = 0.9530341014900772,
+    this.lateGameRiskMultiplier = 0.7810287296831079,
+    this.pijolScarcityWeight = 0,
+    this.fieldOpportunityCosts = const {
+      Figure.PAIR: 7.3976025556240295,
+      Figure.TWO_PAIRS: 7.3976025556240295,
+      Figure.THREE_OF_A_KIND: 7.3976025556240295,
+      Figure.FOUR_OF_A_KIND: 7.3976025556240295,
+      Figure.GENERAL: 0,
+      Figure.MARSHAL: 0,
+      Figure.THREE_PAIRS: 0,
+      Figure.TWO_TRIPLES: 0,
+      Figure.FOUR_PLUS_TWO: 0,
+      Figure.FULL_HOUSE: 0,
+      Figure.SMALL_STRAIGHT: 1.9838911097204304,
+      Figure.BIG_STRAIGHT: 1.9838911097204304,
+      Figure.GREAT_STRAIGHT: 1.9838911097204304,
+      Figure.EVEN: 3.53479505877312,
+      Figure.ODD: 3.53479505877312,
+      Figure.SMALL: 0,
+      Figure.CHANCE: 3.0595451728387917,
+    },
+    this.schoolFaceOpportunityCosts = const {},
     this.pijolFieldCosts = const {
-      Figure.PAIR: 67.69151281052419,
-      Figure.TWO_PAIRS: 67.69151281052419,
-      Figure.THREE_OF_A_KIND: 67.69151281052419,
-      Figure.FOUR_OF_A_KIND: 67.69151281052419,
-      Figure.GENERAL: 0.5921810962825909,
-      Figure.MARSHAL: 0.5921810962825909,
-      Figure.THREE_PAIRS: 38.482302546258836,
-      Figure.TWO_TRIPLES: 38.482302546258836,
-      Figure.FOUR_PLUS_TWO: 38.482302546258836,
-      Figure.FULL_HOUSE: 38.482302546258836,
-      Figure.SMALL_STRAIGHT: 60.07835004457932,
-      Figure.BIG_STRAIGHT: 60.07835004457932,
-      Figure.GREAT_STRAIGHT: 60.07835004457932,
-      Figure.EVEN: 103.53239335627892,
-      Figure.ODD: 103.53239335627892,
-      Figure.SMALL: 11.490478938462099,
-      Figure.CHANCE: 141.89136148249204,
+      Figure.PAIR: 20.242224450845875,
+      Figure.TWO_PAIRS: 20.242224450845875,
+      Figure.THREE_OF_A_KIND: 20.242224450845875,
+      Figure.FOUR_OF_A_KIND: 20.242224450845875,
+      Figure.GENERAL: 0,
+      Figure.MARSHAL: 0,
+      Figure.THREE_PAIRS: 0,
+      Figure.TWO_TRIPLES: 0,
+      Figure.FOUR_PLUS_TWO: 0,
+      Figure.FULL_HOUSE: 0,
+      Figure.SMALL_STRAIGHT: 95.10288177416719,
+      Figure.BIG_STRAIGHT: 95.10288177416719,
+      Figure.GREAT_STRAIGHT: 95.10288177416719,
+      Figure.EVEN: 66.99495774304121,
+      Figure.ODD: 66.99495774304121,
+      Figure.SMALL: 11.038769455304395,
+      Figure.CHANCE: 150.96817083447124,
     },
   });
 }

@@ -6,12 +6,12 @@ void main() {
   test('production defaults use the validated wide candidate profile', () {
     const weights = AdvisorWeights();
 
-    expect(weights.openingColumnValue, 34.31023154115867);
-    expect(weights.chanceCostEarly, 47.513850050906086);
-    expect(weights.schoolBonusProgressWeight, 5.422685406811303);
-    expect(weights.pijolFieldCosts[Figure.PAIR], 67.69151281052419);
-    expect(weights.pijolFieldCosts[Figure.GREAT_STRAIGHT], 60.07835004457932);
-    expect(weights.pijolFieldCosts[Figure.CHANCE], 141.89136148249204);
+    expect(weights.openingColumnValue, 36.64490059669705);
+    expect(weights.chanceCostEarly, 32.385866293107256);
+    expect(weights.schoolBonusProgressWeight, 4.211398428698021);
+    expect(weights.pijolFieldCosts[Figure.PAIR], 20.242224450845875);
+    expect(weights.pijolFieldCosts[Figure.GREAT_STRAIGHT], 95.10288177416719);
+    expect(weights.pijolFieldCosts[Figure.CHANCE], 150.96817083447124);
   });
 
   test('keeps candidate-v3 as a reproducible calibration baseline', () {
@@ -37,6 +37,9 @@ void main() {
       weights: AdvisorWeights(
         pijolBaseCost: 10,
         perfectColumnRiskCost: 0,
+        earlyGameRiskMultiplier: 1,
+        middleGameRiskMultiplier: 1,
+        lateGameRiskMultiplier: 1,
         fieldOpportunityCosts: {Figure.PAIR: 30},
         pijolFieldCosts: {Figure.PAIR: 7},
       ),
@@ -119,6 +122,57 @@ void main() {
       ),
       9,
     );
+  });
+
+  test(
+    'prefers pijoling an easy low-value figure over a scarce high-value one',
+    () {
+      final game = GameState([
+        _openColumn(),
+        ScoreColumn(figures: {Figure.MARSHAL: const ScoreEntry.scored(0)}),
+        ScoreColumn(figures: {Figure.MARSHAL: const ScoreEntry.scored(0)}),
+      ]);
+      const utility = ScoringUtility(
+        weights: AdvisorWeights(
+          pijolBaseCost: 0,
+          perfectColumnRiskCost: 0,
+          pijolScarcityWeight: 1,
+          pijolFieldCosts: {},
+        ),
+      );
+
+      final pair = utility.evaluate(
+        const ScoringOption.pijol(columnIndex: 0, figure: Figure.PAIR),
+        game,
+      );
+      final marshal = utility.evaluate(
+        const ScoringOption.pijol(columnIndex: 0, figure: Figure.MARSHAL),
+        game,
+      );
+
+      expect(pair, greaterThan(marshal));
+    },
+  );
+
+  test('keeps a small school loss preferable to a large school loss', () {
+    final game = GameState([ScoreColumn(), ScoreColumn(), ScoreColumn()]);
+    const utility = ScoringUtility(
+      weights: AdvisorWeights(
+        openingColumnValue: 0,
+        schoolBonusProgressWeight: 0,
+      ),
+    );
+
+    final ones = utility.evaluate(
+      const ScoringOption.school(columnIndex: 0, schoolFace: 1, points: -1),
+      game,
+    );
+    final sixes = utility.evaluate(
+      const ScoringOption.school(columnIndex: 0, schoolFace: 6, points: -18),
+      game,
+    );
+
+    expect(ones, greaterThan(sixes));
   });
 }
 

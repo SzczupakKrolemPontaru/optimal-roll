@@ -35,6 +35,12 @@ class AdvisorWeightSearchSpace {
   final double schoolBonusProgressWeightMax;
   final double schoolCompletionValueMax;
   final double pijolGroupCostMax;
+  final double phaseRiskMultiplierMin;
+  final double phaseRiskMultiplierMax;
+  final double pijolScarcityWeightMax;
+  final double figureOpportunityCostMax;
+  final double schoolFaceOpportunityCostMax;
+  final double futureFieldValueWeightMax;
 
   const AdvisorWeightSearchSpace({
     required this.openingColumnValueMax,
@@ -45,6 +51,12 @@ class AdvisorWeightSearchSpace {
     required this.schoolBonusProgressWeightMax,
     required this.schoolCompletionValueMax,
     required this.pijolGroupCostMax,
+    this.phaseRiskMultiplierMin = .5,
+    this.phaseRiskMultiplierMax = 1.5,
+    this.pijolScarcityWeightMax = 20,
+    this.figureOpportunityCostMax = 40,
+    this.schoolFaceOpportunityCostMax = 40,
+    this.futureFieldValueWeightMax = 2,
   });
 
   static const standard = AdvisorWeightSearchSpace(
@@ -110,6 +122,30 @@ class AdvisorWeightSearchSpace {
       candidate.schoolCompletionValue,
       schoolCompletionValueMax,
     );
+    addIfClose(
+      'pijolScarcityWeight',
+      candidate.pijolScarcityWeight,
+      pijolScarcityWeightMax,
+    );
+    for (final group in PijolFigureGroup.values) {
+      addIfClose(
+        'figureOpportunityCosts.${group.name}',
+        candidate.figureOpportunityCosts[group] ?? 0,
+        figureOpportunityCostMax,
+      );
+    }
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++) {
+      addIfClose(
+        'schoolFaceOpportunityCosts.$face',
+        candidate.schoolFaceOpportunityCosts[face] ?? 0,
+        schoolFaceOpportunityCostMax,
+      );
+    }
+    addIfClose(
+      'futureFieldValueWeight',
+      candidate.futureFieldValueWeight,
+      futureFieldValueWeightMax,
+    );
     for (final group in PijolFigureGroup.values) {
       addIfClose(
         'pijolGroupCosts.${group.name}',
@@ -129,6 +165,12 @@ class AdvisorWeightSearchSpace {
     'schoolBonusProgressWeightMax': schoolBonusProgressWeightMax,
     'schoolCompletionValueMax': schoolCompletionValueMax,
     'pijolGroupCostMax': pijolGroupCostMax,
+    'phaseRiskMultiplierMin': phaseRiskMultiplierMin,
+    'phaseRiskMultiplierMax': phaseRiskMultiplierMax,
+    'pijolScarcityWeightMax': pijolScarcityWeightMax,
+    'figureOpportunityCostMax': figureOpportunityCostMax,
+    'schoolFaceOpportunityCostMax': schoolFaceOpportunityCostMax,
+    'futureFieldValueWeightMax': futureFieldValueWeightMax,
   };
 }
 
@@ -140,6 +182,13 @@ class AdvisorWeightCandidate {
   final double perfectColumnRiskCost;
   final double schoolBonusProgressWeight;
   final double schoolCompletionValue;
+  final double earlyGameRiskMultiplier;
+  final double middleGameRiskMultiplier;
+  final double lateGameRiskMultiplier;
+  final double pijolScarcityWeight;
+  final Map<PijolFigureGroup, double> figureOpportunityCosts;
+  final Map<int, double> schoolFaceOpportunityCosts;
+  final double futureFieldValueWeight;
   final Map<PijolFigureGroup, double> pijolGroupCosts;
 
   const AdvisorWeightCandidate({
@@ -150,6 +199,13 @@ class AdvisorWeightCandidate {
     required this.perfectColumnRiskCost,
     this.schoolBonusProgressWeight = 0,
     this.schoolCompletionValue = 0,
+    this.earlyGameRiskMultiplier = 1,
+    this.middleGameRiskMultiplier = 1,
+    this.lateGameRiskMultiplier = 1,
+    this.pijolScarcityWeight = 0,
+    this.figureOpportunityCosts = const {},
+    this.schoolFaceOpportunityCosts = const {},
+    this.futureFieldValueWeight = 0,
     this.pijolGroupCosts = const {},
   });
 
@@ -163,6 +219,20 @@ class AdvisorWeightCandidate {
       perfectColumnRiskCost: weights.perfectColumnRiskCost,
       schoolBonusProgressWeight: weights.schoolBonusProgressWeight,
       schoolCompletionValue: weights.schoolCompletionValue,
+      earlyGameRiskMultiplier: weights.earlyGameRiskMultiplier,
+      middleGameRiskMultiplier: weights.middleGameRiskMultiplier,
+      lateGameRiskMultiplier: weights.lateGameRiskMultiplier,
+      pijolScarcityWeight: weights.pijolScarcityWeight,
+      figureOpportunityCosts: {
+        for (final group in PijolFigureGroup.values)
+          group:
+              weights.fieldOpportunityCosts[Figure.values.firstWhere(
+                (figure) => pijolGroupFor(figure) == group,
+              )] ??
+              0,
+      },
+      schoolFaceOpportunityCosts: weights.schoolFaceOpportunityCosts,
+      futureFieldValueWeight: weights.futureFieldValueWeight,
       pijolGroupCosts: {
         for (final group in PijolFigureGroup.values)
           group:
@@ -190,6 +260,14 @@ class AdvisorWeightCandidate {
     final groupJson = source['pijolGroupCosts'];
     final groups = groupJson is Map
         ? Map<String, dynamic>.from(groupJson)
+        : const <String, dynamic>{};
+    final opportunityJson = source['figureOpportunityCosts'];
+    final opportunityGroups = opportunityJson is Map
+        ? Map<String, dynamic>.from(opportunityJson)
+        : const <String, dynamic>{};
+    final schoolJson = source['schoolFaceOpportunityCosts'];
+    final schoolCosts = schoolJson is Map
+        ? Map<String, dynamic>.from(schoolJson)
         : const <String, dynamic>{};
     const defaults = AdvisorWeights();
     return AdvisorWeightCandidate(
@@ -228,6 +306,39 @@ class AdvisorWeightCandidate {
         'schoolCompletionValue',
         defaults.schoolCompletionValue,
       ),
+      earlyGameRiskMultiplier: _jsonDouble(
+        source,
+        'earlyGameRiskMultiplier',
+        defaults.earlyGameRiskMultiplier,
+      ),
+      middleGameRiskMultiplier: _jsonDouble(
+        source,
+        'middleGameRiskMultiplier',
+        defaults.middleGameRiskMultiplier,
+      ),
+      lateGameRiskMultiplier: _jsonDouble(
+        source,
+        'lateGameRiskMultiplier',
+        defaults.lateGameRiskMultiplier,
+      ),
+      pijolScarcityWeight: _jsonDouble(
+        source,
+        'pijolScarcityWeight',
+        defaults.pijolScarcityWeight,
+      ),
+      figureOpportunityCosts: {
+        for (final group in PijolFigureGroup.values)
+          group: _jsonDouble(opportunityGroups, group.name, 0),
+      },
+      schoolFaceOpportunityCosts: {
+        for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+          face: _jsonDouble(schoolCosts, '$face', 0),
+      },
+      futureFieldValueWeight: _jsonDouble(
+        source,
+        'futureFieldValueWeight',
+        defaults.futureFieldValueWeight,
+      ),
       pijolGroupCosts: {
         for (final group in PijolFigureGroup.values)
           group: _jsonDouble(groups, group.name, 0),
@@ -243,6 +354,16 @@ class AdvisorWeightCandidate {
     perfectColumnRiskCost: perfectColumnRiskCost,
     schoolBonusProgressWeight: schoolBonusProgressWeight,
     schoolCompletionValue: schoolCompletionValue,
+    earlyGameRiskMultiplier: earlyGameRiskMultiplier,
+    middleGameRiskMultiplier: middleGameRiskMultiplier,
+    lateGameRiskMultiplier: lateGameRiskMultiplier,
+    pijolScarcityWeight: pijolScarcityWeight,
+    fieldOpportunityCosts: {
+      for (final figure in Figure.values)
+        figure: figureOpportunityCosts[pijolGroupFor(figure)] ?? 0,
+    },
+    schoolFaceOpportunityCosts: schoolFaceOpportunityCosts,
+    futureFieldValueWeight: futureFieldValueWeight,
     pijolFieldCosts: {
       for (final figure in Figure.values)
         figure: pijolGroupCosts[pijolGroupFor(figure)] ?? 0,
@@ -257,6 +378,15 @@ class AdvisorWeightCandidate {
     perfectColumnRiskCost,
     schoolBonusProgressWeight,
     schoolCompletionValue,
+    earlyGameRiskMultiplier,
+    middleGameRiskMultiplier,
+    lateGameRiskMultiplier,
+    pijolScarcityWeight,
+    for (final group in PijolFigureGroup.values)
+      figureOpportunityCosts[group] ?? 0,
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+      schoolFaceOpportunityCosts[face] ?? 0,
+    futureFieldValueWeight,
     for (final group in PijolFigureGroup.values) pijolGroupCosts[group] ?? 0,
   ].map((value) => value.toStringAsFixed(8)).join('|');
 
@@ -268,6 +398,19 @@ class AdvisorWeightCandidate {
     'perfectColumnRiskCost': perfectColumnRiskCost,
     'schoolBonusProgressWeight': schoolBonusProgressWeight,
     'schoolCompletionValue': schoolCompletionValue,
+    'earlyGameRiskMultiplier': earlyGameRiskMultiplier,
+    'middleGameRiskMultiplier': middleGameRiskMultiplier,
+    'lateGameRiskMultiplier': lateGameRiskMultiplier,
+    'pijolScarcityWeight': pijolScarcityWeight,
+    'figureOpportunityCosts': {
+      for (final group in PijolFigureGroup.values)
+        group.name: figureOpportunityCosts[group] ?? 0,
+    },
+    'schoolFaceOpportunityCosts': {
+      for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+        '$face': schoolFaceOpportunityCosts[face] ?? 0,
+    },
+    'futureFieldValueWeight': futureFieldValueWeight,
     'pijolGroupCosts': {
       for (final group in PijolFigureGroup.values)
         group.name: pijolGroupCosts[group] ?? 0,
@@ -427,6 +570,39 @@ class WeightOptimizationResult {
 
   StrategyComparison get testComparison =>
       StrategyComparison(candidate: testReport, baseline: testBaselineReport);
+
+  WeightOptimizationResult copyWithBestCandidate(
+    AdvisorWeightCandidate candidate,
+  ) => WeightOptimizationResult(
+    profileName: profileName,
+    options: options,
+    bestCandidate: candidate,
+    trainingReport: trainingReport,
+    validationReport: validationReport,
+    validationBaselineReport: validationBaselineReport,
+    testReport: testReport,
+    testBaselineReport: testBaselineReport,
+    validatedCandidates: validatedCandidates,
+    bestScoreByGeneration: bestScoreByGeneration,
+  );
+
+  WeightOptimizationResult copyWithExactReports({
+    required AdvisorWeightCandidate candidate,
+    required SimulationReport training,
+    required SimulationReport validation,
+    required SimulationReport test,
+  }) => WeightOptimizationResult(
+    profileName: profileName,
+    options: options,
+    bestCandidate: candidate,
+    trainingReport: training,
+    validationReport: validation,
+    validationBaselineReport: validationBaselineReport,
+    testReport: test,
+    testBaselineReport: testBaselineReport,
+    validatedCandidates: validatedCandidates,
+    bestScoreByGeneration: bestScoreByGeneration,
+  );
 
   bool get isValidatedImprovement =>
       testReport.gameCount >= 30 &&
@@ -722,6 +898,32 @@ AdvisorWeightCandidate _randomCandidate(
       random.nextDouble() * searchSpace.schoolBonusProgressWeightMax,
   schoolCompletionValue:
       random.nextDouble() * searchSpace.schoolCompletionValueMax,
+  earlyGameRiskMultiplier: _randomInRange(
+    random,
+    searchSpace.phaseRiskMultiplierMin,
+    searchSpace.phaseRiskMultiplierMax,
+  ),
+  middleGameRiskMultiplier: _randomInRange(
+    random,
+    searchSpace.phaseRiskMultiplierMin,
+    searchSpace.phaseRiskMultiplierMax,
+  ),
+  lateGameRiskMultiplier: _randomInRange(
+    random,
+    searchSpace.phaseRiskMultiplierMin,
+    searchSpace.phaseRiskMultiplierMax,
+  ),
+  pijolScarcityWeight: random.nextDouble() * searchSpace.pijolScarcityWeightMax,
+  figureOpportunityCosts: {
+    for (final group in PijolFigureGroup.values)
+      group: random.nextDouble() * searchSpace.figureOpportunityCostMax,
+  },
+  schoolFaceOpportunityCosts: {
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+      face: random.nextDouble() * searchSpace.schoolFaceOpportunityCostMax,
+  },
+  futureFieldValueWeight:
+      random.nextDouble() * searchSpace.futureFieldValueWeightMax,
   pijolGroupCosts: {
     for (final group in PijolFigureGroup.values)
       group: random.nextDouble() * searchSpace.pijolGroupCostMax,
@@ -776,6 +978,57 @@ AdvisorWeightCandidate _mutate(
     random,
     scale,
   ),
+  earlyGameRiskMultiplier: _mutatedRange(
+    parent.earlyGameRiskMultiplier,
+    searchSpace.phaseRiskMultiplierMin,
+    searchSpace.phaseRiskMultiplierMax,
+    random,
+    scale,
+  ),
+  middleGameRiskMultiplier: _mutatedRange(
+    parent.middleGameRiskMultiplier,
+    searchSpace.phaseRiskMultiplierMin,
+    searchSpace.phaseRiskMultiplierMax,
+    random,
+    scale,
+  ),
+  lateGameRiskMultiplier: _mutatedRange(
+    parent.lateGameRiskMultiplier,
+    searchSpace.phaseRiskMultiplierMin,
+    searchSpace.phaseRiskMultiplierMax,
+    random,
+    scale,
+  ),
+  pijolScarcityWeight: _mutated(
+    parent.pijolScarcityWeight,
+    searchSpace.pijolScarcityWeightMax,
+    random,
+    scale,
+  ),
+  figureOpportunityCosts: {
+    for (final group in PijolFigureGroup.values)
+      group: _mutated(
+        parent.figureOpportunityCosts[group] ?? 0,
+        searchSpace.figureOpportunityCostMax,
+        random,
+        scale,
+      ),
+  },
+  schoolFaceOpportunityCosts: {
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+      face: _mutated(
+        parent.schoolFaceOpportunityCosts[face] ?? 0,
+        searchSpace.schoolFaceOpportunityCostMax,
+        random,
+        scale,
+      ),
+  },
+  futureFieldValueWeight: _mutated(
+    parent.futureFieldValueWeight,
+    searchSpace.futureFieldValueWeightMax,
+    random,
+    scale,
+  ),
   pijolGroupCosts: {
     for (final group in PijolFigureGroup.values)
       group: _mutated(
@@ -791,6 +1044,19 @@ double _mutated(double value, double maximum, Random random, double scale) {
   final delta = (random.nextDouble() * 2 - 1) * maximum * scale;
   return (value + delta).clamp(0, maximum).toDouble();
 }
+
+double _randomInRange(Random random, double minimum, double maximum) =>
+    minimum + random.nextDouble() * (maximum - minimum);
+
+double _mutatedRange(
+  double value,
+  double minimum,
+  double maximum,
+  Random random,
+  double scale,
+) => (value + (random.nextDouble() * 2 - 1) * (maximum - minimum) * scale)
+    .clamp(minimum, maximum)
+    .toDouble();
 
 double _jsonDouble(Map<String, dynamic> json, String key, double fallback) {
   final value = json[key];

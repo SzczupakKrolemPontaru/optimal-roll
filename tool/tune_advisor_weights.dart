@@ -57,7 +57,16 @@ Future<void> main(List<String> arguments) async {
         );
       },
     );
-    exploratoryResults.add(result);
+    final selectedResult = options.fastExploration
+        ? await _exactlyRerankFastFinalists(
+            result: result,
+            runner: runner,
+            games: options.exactTrainingGames,
+            firstSeed: seed + 3000000,
+            workers: options.workers,
+          )
+        : result;
+    exploratoryResults.add(selectedResult);
     final path = '${options.outputDirectory}/$profileName.json';
     await File(path).writeAsString(
       '${const JsonEncoder.withIndent('  ').convert(result.toJson())}\n',
@@ -165,6 +174,61 @@ Future<void> main(List<String> arguments) async {
   print('Saved tuning summary to $summaryPath');
 }
 
+Future<WeightOptimizationResult> _exactlyRerankFastFinalists({
+  required WeightOptimizationResult result,
+  required SimulationRunner runner,
+  required int games,
+  required int firstSeed,
+  required int workers,
+}) async {
+  final exactReports = <AdvisorWeightCandidate, SimulationReport>{};
+  for (final finalist in result.validatedCandidates) {
+    exactReports[finalist.candidate] = await runner.runParallel(
+      strategy: AdvisorGameStrategy.withWeights(
+        name: '${result.profileName}-exact-training',
+        weights: finalist.candidate.weights,
+      ),
+      gameCount: games,
+      firstSeed: firstSeed,
+      workers: workers,
+    );
+  }
+  if (exactReports.isEmpty) return result;
+  final selected = exactReports.entries.reduce(
+    (left, right) => left.value.totalScore.mean >= right.value.totalScore.mean
+        ? left
+        : right,
+  );
+  print(
+    '  exact finalist rerank: '
+    '${selected.value.totalScore.mean.toStringAsFixed(2)}',
+  );
+  final validation = await runner.runParallel(
+    strategy: AdvisorGameStrategy.withWeights(
+      name: '${result.profileName}-exact-validation',
+      weights: selected.key.weights,
+    ),
+    gameCount: result.options.validationGames,
+    firstSeed: result.options.firstValidationSeed,
+    workers: workers,
+  );
+  final test = await runner.runParallel(
+    strategy: AdvisorGameStrategy.withWeights(
+      name: '${result.profileName}-exact-test',
+      weights: selected.key.weights,
+    ),
+    gameCount: result.options.testGames,
+    firstSeed: result.options.firstTestSeed,
+    workers: workers,
+  );
+  return result.copyWithExactReports(
+    candidate: selected.key,
+    training: selected.value,
+    validation: validation,
+    test: test,
+  );
+}
+
 String _signed(double value) =>
     '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}';
 
@@ -182,6 +246,8 @@ Options:
   --generations <count>        Generations per search (default: 5)
   --min-training-games <n>     Games in first generation (default: 10)
   --training-games <count>     Games in final generation (default: 100)
+  --exact-training-games <n>   Exact games for finalists after fast filter
+                               (default: 300)
   --finalists <count>          Finalists per search validation (default: 3)
   --validation-games <count>   Validation games per search (default: 200)
   --exploratory-test-games <n> Cheap test games per search (default: 30)
@@ -208,6 +274,7 @@ class _Options {
   final int generations;
   final int minimumTrainingGames;
   final int trainingGames;
+  final int exactTrainingGames;
   final int finalists;
   final int validationGames;
   final int exploratoryTestGames;
@@ -231,6 +298,7 @@ class _Options {
     required this.generations,
     required this.minimumTrainingGames,
     required this.trainingGames,
+    required this.exactTrainingGames,
     required this.finalists,
     required this.validationGames,
     required this.exploratoryTestGames,
@@ -255,6 +323,7 @@ class _Options {
     var generations = 5;
     var minimumTrainingGames = 10;
     var trainingGames = 100;
+    var exactTrainingGames = 300;
     var finalists = 3;
     var validationGames = 200;
     var exploratoryTestGames = 30;
@@ -287,6 +356,10 @@ class _Options {
           );
         case '--training-games':
           trainingGames = int.parse(_nextValue(arguments, ++index, argument));
+        case '--exact-training-games':
+          exactTrainingGames = int.parse(
+            _nextValue(arguments, ++index, argument),
+          );
         case '--finalists':
           finalists = int.parse(_nextValue(arguments, ++index, argument));
         case '--validation-games':
@@ -332,6 +405,7 @@ class _Options {
         generations <= 0 ||
         minimumTrainingGames <= 0 ||
         trainingGames < minimumTrainingGames ||
+        exactTrainingGames <= 0 ||
         finalists <= 0 ||
         finalists > population ||
         validationGames <= 0 ||
@@ -349,6 +423,7 @@ class _Options {
       generations: generations,
       minimumTrainingGames: minimumTrainingGames,
       trainingGames: trainingGames,
+      exactTrainingGames: exactTrainingGames,
       finalists: finalists,
       validationGames: validationGames,
       exploratoryTestGames: exploratoryTestGames,
