@@ -466,6 +466,7 @@ class AdvisorWeightOptimizer {
   Future<WeightOptimizationResult> optimize({
     WeightOptimizerOptions options = const WeightOptimizerOptions(),
     String profileName = 'optimized-v2',
+    bool fastTraining = false,
     OptimizationProgressCallback? onProgress,
   }) async {
     options.validate();
@@ -489,7 +490,8 @@ class AdvisorWeightOptimizer {
         late final SimulationReport report;
         if (cachedReport == null) {
           report = await runner.runParallel(
-            strategy: AdvisorGameStrategy.withWeights(
+            strategy: _strategyFor(
+              fastTraining: fastTraining,
               name: 'candidate-g${generation + 1}-${index + 1}',
               weights: candidate.weights,
             ),
@@ -501,7 +503,8 @@ class AdvisorWeightOptimizer {
           report = cachedReport;
         } else {
           final additional = await runner.runParallel(
-            strategy: AdvisorGameStrategy.withWeights(
+            strategy: _strategyFor(
+              fastTraining: fastTraining,
               name: 'candidate-g${generation + 1}-${index + 1}',
               weights: candidate.weights,
             ),
@@ -619,6 +622,14 @@ class AdvisorWeightOptimizer {
       bestScoreByGeneration: List.unmodifiable(bestScoreByGeneration),
     );
   }
+
+  GameStrategy _strategyFor({
+    required bool fastTraining,
+    required String name,
+    required AdvisorWeights weights,
+  }) => fastTraining
+      ? FastAdvisorGameStrategy.withWeights(name: name, weights: weights)
+      : AdvisorGameStrategy.withWeights(name: name, weights: weights);
 }
 
 class _EvaluatedCandidate {

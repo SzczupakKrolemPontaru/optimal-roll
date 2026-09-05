@@ -35,12 +35,19 @@ class GameSimulator {
         );
         switch (action) {
           case ScoreAdvisorAction(:final option):
-            _validateScoringAction(
-              option,
-              dice,
-              game,
-              figuresFromHand: rollIndex == 0,
-            );
+            // AdvisorGameStrategy obtains scoring moves directly from the
+            // same legalOptions implementation used here. Recomputing all
+            // scorecard options for every scored turn is a sizeable cost in
+            // large simulations, so reserve the defensive validation for
+            // external/custom strategies.
+            if (strategy is! AdvisorGameStrategy) {
+              _validateScoringAction(
+                option,
+                dice,
+                game,
+                figuresFromHand: rollIndex == 0,
+              );
+            }
             if (rollIndex == 0 && option.type == ScoringOptionType.figure) {
               figuresScoredFromHand++;
             }

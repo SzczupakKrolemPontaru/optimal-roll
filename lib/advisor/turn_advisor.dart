@@ -110,6 +110,7 @@ class _TurnSolver {
   final Map<int, AdvisorMoveEvaluation> _bestScoringMoveCache = {};
   final Map<int, _StateValue> _rerollValueCache = {};
   final Map<int, List<AdvisorTarget>> _targetDistributionCache = {};
+  final Map<int, double> _strategicValueCache = {};
 
   _TurnSolver({required this.game, required this.scoringUtility});
 
@@ -271,7 +272,7 @@ class _TurnSolver {
           AdvisorMoveEvaluation(
             action: ScoreAdvisorAction(option),
             expectedTurnScore: option.points.toDouble(),
-            strategicValue: scoringUtility.evaluate(option, game),
+            strategicValue: _strategicValue(option),
             pijolRisk: option.type == ScoringOptionType.pijol ? 1 : 0,
           ),
       ];
@@ -298,7 +299,7 @@ class _TurnSolver {
       final candidate = AdvisorMoveEvaluation(
         action: ScoreAdvisorAction(option),
         expectedTurnScore: option.points.toDouble(),
-        strategicValue: scoringUtility.evaluate(option, game),
+        strategicValue: _strategicValue(option),
         pijolRisk: option.type == ScoringOptionType.pijol ? 1 : 0,
       );
       if (best == null || _compareMoves(candidate, best) < 0) {
@@ -323,6 +324,14 @@ class _TurnSolver {
         ),
       };
     });
+  }
+
+  double _strategicValue(ScoringOption option) {
+    final key = _scoringOptionKey(option);
+    return _strategicValueCache.putIfAbsent(
+      key,
+      () => scoringUtility.evaluate(option, game),
+    );
   }
 
   List<AdvisorTarget> _targetsAfterReroll(List<int> keptCounts, int rollsLeft) {
@@ -505,6 +514,15 @@ int _countsKey(List<int> counts) {
 
 int _stateKey(List<int> counts, int rollsLeft) =>
     _countsKey(counts) * 3 + rollsLeft;
+
+int _scoringOptionKey(ScoringOption option) {
+  var key = option.type.index;
+  key = key * 4 + option.columnIndex;
+  key = key * (Figure.values.length + 1) + (option.figure?.index ?? -1) + 1;
+  key = key * (MAX_DIE_VALUE + 1) + (option.schoolFace ?? 0);
+  key = key * 401 + option.points;
+  return key;
+}
 
 int _sum(List<int> values) => values.fold(0, (sum, value) => sum + value);
 
