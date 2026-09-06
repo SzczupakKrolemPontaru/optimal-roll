@@ -18,12 +18,33 @@ class ScoringUtility {
         final usedSchoolFields = column.school.values
             .where((entry) => entry.status != FieldStatus.EMPTY)
             .length;
+        value +=
+            weights.schoolBonusTargetWeight *
+            _schoolBonusTargetDelta(
+              column.rawSchoolScore,
+              column.rawSchoolScore + option.points,
+              oldBonus,
+              usedSchoolFields,
+            );
         final completionProgress = usedSchoolFields / column.school.length;
         value +=
             option.points *
             weights.schoolBonusProgressWeight *
             completionProgress;
+        value += option.points * weights.schoolPointWeight;
+        if (option.points < 0) {
+          // A negative high-face entry is not equivalent to a small loss on
+          // ones: it consumes a harder-to-repair school slot and pushes the
+          // column farther from its useful total.
+          value -=
+              weights.schoolNegativePenaltyWeight *
+              -option.points *
+              (1 + option.schoolFace! / MAX_DIE_VALUE);
+        }
         value -= weights.schoolFaceOpportunityCosts[option.schoolFace] ?? 0;
+        if (!column.isOpen) {
+          value -= weights.schoolOpeningFaceCosts[option.schoolFace] ?? 0;
+        }
         if (!column.isOpen && usedSchoolFields == SCHOOL_NEUTRAL_COUNT - 1) {
           value += weights.openingColumnValue;
         }
@@ -32,16 +53,48 @@ class ScoringUtility {
         }
       case ScoringOptionType.figure:
         value -= weights.fieldOpportunityCosts[option.figure] ?? 0;
+        // Completing the last clean figure in a column immediately grants
+        // the real 100-point perfect-column bonus. This must be visible to
+        // the advisor at decision time; otherwise it only sees the figure's
+        // face value and has no reason to finish a nearly complete column.
+        if (!column.hasPijol &&
+            column.figures.values
+                    .where((entry) => entry.status == FieldStatus.EMPTY)
+                    .length ==
+                1) {
+          value += PERFECT_COLUMN_BONUS - column.perfectColumnBonus;
+        }
+        value +=
+            weights.figureCompletionValueWeight *
+            _figureCompletionValue(game, option.columnIndex, option.figure!);
         if (option.figure == Figure.CHANCE) {
           value -= _chanceCost(game);
         }
       case ScoringOptionType.pijol:
         final riskMultiplier = _riskMultiplier(game);
         final scarcityCost = _pijolScarcityCost(option.figure!, game);
+        final filledFigures = column.figures.values
+            .where((entry) => entry.status != FieldStatus.EMPTY)
+            .length;
+        final progress = filledFigures / column.figures.length;
+        // Protect the perfect-column bonus mainly near completion. A linear
+        // penalty made the advisor overly afraid of an early Pijol; the
+        // sixth-power curve leaves early options available while making a
+        // late Pijol in a nearly finished clean column expensive.
+        final progressRisk =
+            weights.perfectColumnProgressWeight *
+            progress *
+            progress *
+            progress *
+            progress *
+            progress *
+            progress;
         value -=
             (weights.pijolBaseCost +
                 (weights.pijolFieldCosts[option.figure] ?? 0) +
-                (!column.hasPijol ? weights.perfectColumnRiskCost : 0) +
+                (!column.hasPijol
+                    ? weights.perfectColumnRiskCost + progressRisk
+                    : 0) +
                 scarcityCost) *
             riskMultiplier;
     }
@@ -68,9 +121,52 @@ class ScoringUtility {
         weights.chanceCostLate * progress;
   }
 
+  double _figureCompletionValue(
+    GameState game,
+    int columnIndex,
+    Figure figure,
+  ) {
+    final remaining = game.columns
+        .where((column) => column.figures[figure]!.status == FieldStatus.EMPTY)
+        .length;
+    if (remaining == 0) return 0;
+    final targetColumn = game.columns[columnIndex];
+    final filledFigures = targetColumn.figures.values
+        .where((entry) => entry.status != FieldStatus.EMPTY)
+        .length;
+    final nearColumnCompletion =
+        filledFigures == targetColumn.figures.length - 1 ? 1.0 : 0.0;
+    return 1 / remaining + nearColumnCompletion;
+  }
+
   int _schoolBonus(int rawScore) => rawScore <= SCHOOL_BONUS_THRESHOLD
       ? 0
       : ((rawScore - 1) ~/ SCHOOL_BONUS_THRESHOLD) * SCHOOL_BONUS_POINTS;
+
+  double _schoolTargetProgress(int rawScore, int currentBonus) {
+    final target =
+        ((currentBonus ~/ SCHOOL_BONUS_POINTS) + 1) * SCHOOL_BONUS_THRESHOLD +
+        1;
+    return (rawScore / target).clamp(-1.0, 1.0);
+  }
+
+  double _schoolBonusTargetDelta(
+    int oldRaw,
+    int newRaw,
+    int currentBonus,
+    int usedSchoolFields,
+  ) {
+    if (usedSchoolFields < 2) return 0;
+    final target =
+        ((currentBonus ~/ SCHOOL_BONUS_POINTS) + 1) * SCHOOL_BONUS_THRESHOLD +
+        1;
+    // Preserve figure opportunities while a school is far from its next
+    // bonus. Once it is close, the target term can make the threshold
+    // crossing decisive.
+    if (oldRaw < target - 5 && newRaw < target) return 0;
+    return _schoolTargetProgress(newRaw, currentBonus) -
+        _schoolTargetProgress(oldRaw, currentBonus);
+  }
 
   double _riskMultiplier(GameState game) {
     var usedFields = 0;
@@ -124,19 +220,52 @@ class ScoringUtility {
     final next = applyScoringOption(game, option);
     var value = 0.0;
     for (final column in next.columns) {
+      final emptyFigureCount = column.figures.values
+          .where((entry) => entry.status == FieldStatus.EMPTY)
+          .length;
       for (final entry in column.figures.entries) {
         if (entry.value.status == FieldStatus.EMPTY) {
           value += _figurePotential(entry.key) / 3;
         }
+      }
+      if (!column.hasPijol && emptyFigureCount == 1) {
+        value += 100;
+      } else if (!column.hasPijol && emptyFigureCount == 2) {
+        value += 40;
       }
       for (final entry in column.school.entries) {
         if (entry.value.status == FieldStatus.EMPTY) {
           value += entry.key.toDouble();
         }
       }
-      if (!column.isOpen) value += 20;
-      if (!column.hasPijol) value += 30;
+      value += _schoolBonusPotential(column);
     }
     return value;
+  }
+
+  double _schoolBonusPotential(ScoreColumn column) {
+    final emptyFaces = column.school.entries
+        .where((entry) => entry.value.status == FieldStatus.EMPTY)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    if (emptyFaces.isEmpty) return 0;
+
+    final nextTarget =
+        ((column.schoolBonus ~/ SCHOOL_BONUS_POINTS) + 1) *
+            SCHOOL_BONUS_THRESHOLD +
+        1;
+    final remainingMaximum = emptyFaces.fold<int>(
+      0,
+      (sum, face) => sum + face * (DICE_COUNT - SCHOOL_NEUTRAL_COUNT),
+    );
+    if (remainingMaximum <= 0) return 0;
+
+    final reachableMargin =
+        column.rawSchoolScore + remainingMaximum - nextTarget;
+    // A school bonus is worth 50 points per threshold.  The previous value
+    // of 20 made a reachable bonus almost invisible next to ordinary figure
+    // scores, so the advisor routinely spent the remaining school slots on
+    // short-term points instead of finishing the column.
+    return 325 * (reachableMargin / remainingMaximum).clamp(0.0, 1.0);
   }
 }

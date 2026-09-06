@@ -179,6 +179,7 @@ class _TurnSolver {
       expectedTurnScore: move.expectedTurnScore,
       strategicValue: move.strategicValue,
       pijolRisk: move.pijolRisk,
+      pijolColumnFilled: move.pijolColumnFilled,
       likelyTargets: targets,
     );
   }
@@ -223,7 +224,16 @@ class _TurnSolver {
     }
     final result = _StateValue(
       expectedTurnScore: expectedPoints,
-      strategicValue: expectedStrategicValue,
+      strategicValue:
+          expectedStrategicValue +
+          scoringUtility.weights.rerollValueWeight * rollsLeft +
+          scoringUtility.weights.rerollLowScoreWeight *
+              ((40 - expectedPoints) / 40).clamp(0.0, 1.0) *
+              rollsLeft +
+          scoringUtility.weights.rareFigureChaseWeight *
+              _rareFigureChasePotential(keptCounts, rollsLeft) +
+          scoringUtility.weights.straightChaseWeight *
+              _straightChasePotential(keptCounts, rollsLeft),
       pijolRisk: pijolRisk,
     );
     _rerollValueCache[cacheKey] = result;
@@ -274,6 +284,7 @@ class _TurnSolver {
             expectedTurnScore: option.points.toDouble(),
             strategicValue: _strategicValue(option),
             pijolRisk: option.type == ScoringOptionType.pijol ? 1 : 0,
+            pijolColumnFilled: _pijolColumnFilled(option),
           ),
       ];
       moves.sort(_compareMoves);
@@ -301,6 +312,7 @@ class _TurnSolver {
         expectedTurnScore: option.points.toDouble(),
         strategicValue: _strategicValue(option),
         pijolRisk: option.type == ScoringOptionType.pijol ? 1 : 0,
+        pijolColumnFilled: _pijolColumnFilled(option),
       );
       if (best == null || _compareMoves(candidate, best) < 0) {
         best = candidate;
@@ -333,6 +345,50 @@ class _TurnSolver {
       () => scoringUtility.evaluate(option, game),
     );
   }
+
+  int _pijolColumnFilled(ScoringOption option) {
+    if (option.type != ScoringOptionType.pijol) return 0;
+    return game.columns[option.columnIndex].figures.values
+        .where((entry) => entry.status != FieldStatus.EMPTY)
+        .length;
+  }
+
+  double _rareFigureChasePotential(List<int> keptCounts, int rollsLeft) {
+    final largestGroup = keptCounts.fold<int>(
+      0,
+      (largest, count) => count > largest ? count : largest,
+    );
+    if (largestGroup < 3 || rollsLeft == 0) return 0;
+    return ((largestGroup - 2) / 3).clamp(0.0, 1.0) * ((rollsLeft + 1) / 3);
+  }
+
+  double _straightChasePotential(List<int> keptCounts, int rollsLeft) {
+    if (rollsLeft == 0) return 0;
+    final openStraightSlots = game.columns
+        .where((column) => column.isOpen)
+        .expand(
+          (column) => [
+            Figure.SMALL_STRAIGHT,
+            Figure.BIG_STRAIGHT,
+            Figure.GREAT_STRAIGHT,
+          ].where((figure) => column.figures[figure]!.status == FieldStatus.EMPTY),
+        )
+        .length;
+    if (openStraightSlots == 0) return 0;
+    final small = _facesPresentInRange(keptCounts, 1, 5);
+    final big = _facesPresentInRange(keptCounts, 2, 6);
+    final present = max(small, big);
+    if (present < 4) return 0;
+    final slotFactor = (openStraightSlots / 3).clamp(0.0, 1.0);
+    return ((present - 3) / 2).clamp(0.0, 1.0) *
+        ((rollsLeft + 1) / 3) *
+        slotFactor;
+  }
+
+  int _facesPresentInRange(List<int> counts, int first, int last) => [
+    for (var face = first; face <= last; face++)
+      if (counts[face - MIN_DIE_VALUE] > 0) face,
+  ].length;
 
   List<AdvisorTarget> _targetsAfterReroll(List<int> keptCounts, int rollsLeft) {
     final accumulators = <int, _TargetAccumulator>{};
@@ -560,7 +616,24 @@ int _compareMoves(AdvisorMoveEvaluation left, AdvisorMoveEvaluation right) {
     _StateValue.fromMove(left),
     _StateValue.fromMove(right),
   );
-  if (values != 0) return values;
+  if (values != 0) {
+    // Pijol should normally go to the least-filled figure column when the
+    // strategic difference is small.  Requiring an exact tie made this rule
+    // practically invisible because future-field terms differ by fractions.
+    if (left.action is ScoreAdvisorAction &&
+        right.action is ScoreAdvisorAction &&
+        (left.action as ScoreAdvisorAction).option.type ==
+            ScoringOptionType.pijol &&
+        (right.action as ScoreAdvisorAction).option.type ==
+            ScoringOptionType.pijol &&
+        (left.strategicValue - right.strategicValue).abs() <= 5) {
+      final columnProgress = left.pijolColumnFilled.compareTo(
+        right.pijolColumnFilled,
+      );
+      if (columnProgress != 0) return columnProgress;
+    }
+    return values;
+  }
 
   if (left.action is ScoreAdvisorAction &&
       right.action is RerollAdvisorAction) {
@@ -569,6 +642,17 @@ int _compareMoves(AdvisorMoveEvaluation left, AdvisorMoveEvaluation right) {
   if (left.action is RerollAdvisorAction &&
       right.action is ScoreAdvisorAction) {
     return 1;
+  }
+  if (left.action is ScoreAdvisorAction &&
+      right.action is ScoreAdvisorAction &&
+      (left.action as ScoreAdvisorAction).option.type ==
+          ScoringOptionType.pijol &&
+      (right.action as ScoreAdvisorAction).option.type ==
+          ScoringOptionType.pijol) {
+    final columnProgress = left.pijolColumnFilled.compareTo(
+      right.pijolColumnFilled,
+    );
+    if (columnProgress != 0) return columnProgress;
   }
   if (left.action case RerollAdvisorAction(:final rerolledDieIndices)) {
     final rightReroll = right.action as RerollAdvisorAction;

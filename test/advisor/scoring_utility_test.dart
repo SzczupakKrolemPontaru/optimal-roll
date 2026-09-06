@@ -9,6 +9,8 @@ void main() {
     expect(weights.openingColumnValue, 36.64490059669705);
     expect(weights.chanceCostEarly, 32.385866293107256);
     expect(weights.schoolBonusProgressWeight, 4.211398428698021);
+    expect(weights.schoolNegativePenaltyWeight, 2.6593174842867864);
+    expect(weights.fieldOpportunityCosts[Figure.FULL_HOUSE], 20);
     expect(weights.pijolFieldCosts[Figure.PAIR], 20.242224450845875);
     expect(weights.pijolFieldCosts[Figure.GREAT_STRAIGHT], 95.10288177416719);
     expect(weights.pijolFieldCosts[Figure.CHANCE], 150.96817083447124);
@@ -40,6 +42,7 @@ void main() {
         earlyGameRiskMultiplier: 1,
         middleGameRiskMultiplier: 1,
         lateGameRiskMultiplier: 1,
+        futureFieldValueWeight: 0,
         fieldOpportunityCosts: {Figure.PAIR: 30},
         pijolFieldCosts: {Figure.PAIR: 7},
       ),
@@ -84,10 +87,11 @@ void main() {
       schoolFace: 4,
       points: 4,
     );
-    const utility = ScoringUtility(
+      const utility = ScoringUtility(
       weights: AdvisorWeights(
         openingColumnValue: 0,
         schoolBonusProgressWeight: 1,
+        futureFieldValueWeight: 0,
       ),
     );
 
@@ -112,7 +116,11 @@ void main() {
       ScoreColumn(),
     ]);
     const utility = ScoringUtility(
-      weights: AdvisorWeights(schoolCompletionValue: 9),
+      weights: AdvisorWeights(
+        schoolCompletionValue: 9,
+        futureFieldValueWeight: 0,
+        schoolFaceOpportunityCosts: {},
+      ),
     );
 
     expect(
@@ -174,12 +182,88 @@ void main() {
 
     expect(ones, greaterThan(sixes));
   });
+
+  test('adds extra cost to a hard-to-repair high-face school loss', () {
+    final game = GameState([ScoreColumn(), ScoreColumn(), ScoreColumn()]);
+    const utility = ScoringUtility(
+      weights: AdvisorWeights(
+        openingColumnValue: 0,
+        schoolNegativePenaltyWeight: 1,
+      ),
+    );
+
+    final ones = utility.evaluate(
+      const ScoringOption.school(columnIndex: 0, schoolFace: 1, points: -2),
+      game,
+    );
+    final fours = utility.evaluate(
+      const ScoringOption.school(columnIndex: 0, schoolFace: 4, points: -4),
+      game,
+    );
+
+    expect(ones, greaterThan(fours));
+  });
+
+  test('protects a nearly perfect column when choosing a pijol', () {
+    final game = GameState([
+      _openColumn(figures: {Figure.PAIR: const ScoreEntry.scored(2)}),
+      _openColumn(),
+      ScoreColumn(),
+    ]);
+    const utility = ScoringUtility(
+      weights: AdvisorWeights(
+        pijolBaseCost: 0,
+        perfectColumnRiskCost: 10,
+        perfectColumnProgressWeight: 20,
+        futureFieldValueWeight: 0,
+        pijolFieldCosts: {},
+      ),
+    );
+
+    final early = utility.evaluate(
+      const ScoringOption.pijol(columnIndex: 1, figure: Figure.PAIR),
+      game,
+    );
+    final late = utility.evaluate(
+      const ScoringOption.pijol(columnIndex: 0, figure: Figure.PAIR),
+      game,
+    );
+
+    expect(early, greaterThan(late));
+  });
+
+  test('values filling the last remaining slot for a figure', () {
+    final game = GameState([
+      _openColumn(figures: {Figure.MARSHAL: const ScoreEntry.scored(0)}),
+      _openColumn(figures: {Figure.MARSHAL: const ScoreEntry.scored(0)}),
+      _openColumn(),
+    ]);
+    const utility = ScoringUtility(
+      weights: AdvisorWeights(
+        figureCompletionValueWeight: 10,
+        fieldOpportunityCosts: {},
+      ),
+    );
+
+    expect(
+      utility.evaluate(
+        const ScoringOption.figure(
+          columnIndex: 2,
+          figure: Figure.MARSHAL,
+          points: 100,
+        ),
+        game,
+      ),
+      greaterThan(100),
+    );
+  });
 }
 
-ScoreColumn _openColumn() => ScoreColumn(
+ScoreColumn _openColumn({Map<Figure, ScoreEntry>? figures}) => ScoreColumn(
   school: {
     1: const ScoreEntry.scored(0),
     2: const ScoreEntry.scored(0),
     3: const ScoreEntry.scored(0),
   },
+  figures: figures,
 );

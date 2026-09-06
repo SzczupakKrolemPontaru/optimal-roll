@@ -26,6 +26,7 @@ class AdvisorMoveEvaluation {
   final double expectedTurnScore;
   final double strategicValue;
   final double pijolRisk;
+  final int pijolColumnFilled;
   final List<AdvisorTarget> likelyTargets;
 
   const AdvisorMoveEvaluation({
@@ -33,6 +34,7 @@ class AdvisorMoveEvaluation {
     required this.expectedTurnScore,
     required this.strategicValue,
     required this.pijolRisk,
+    this.pijolColumnFilled = 0,
     this.likelyTargets = const [],
   });
 }

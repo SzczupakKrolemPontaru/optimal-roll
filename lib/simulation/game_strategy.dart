@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../advisor/advisor.dart';
 import '../domain/game_engine.dart';
 
@@ -53,6 +55,198 @@ class AdvisorGameStrategy implements GameStrategy {
       _AdvisorTurnStrategy(advisor.startTurn(game));
 }
 
+/// Offline-only strategy that uses short Monte Carlo rollouts for close
+/// scoring choices. Reroll decisions remain under the exact turn solver.
+class RolloutAdvisorGameStrategy implements GameStrategy {
+  @override
+  final String name;
+  final TurnAdvisor advisor;
+  final int samples;
+  final int horizon;
+  final double lateGameThreshold;
+  final double closeDecisionThreshold;
+  final bool fastFuture;
+
+  const RolloutAdvisorGameStrategy({
+    this.name = 'rollout-advisor',
+    this.advisor = const TurnAdvisor(),
+    this.samples = 4,
+    this.horizon = 1,
+    this.lateGameThreshold = .8,
+    this.closeDecisionThreshold = 4,
+    this.fastFuture = true,
+  });
+
+  factory RolloutAdvisorGameStrategy.withWeights({
+    required String name,
+    required AdvisorWeights weights,
+    int samples = 4,
+    int horizon = 1,
+    double lateGameThreshold = .8,
+    double closeDecisionThreshold = 4,
+    bool fastFuture = true,
+  }) => RolloutAdvisorGameStrategy(
+    name: name,
+    advisor: TurnAdvisor(scoringUtility: ScoringUtility(weights: weights)),
+    samples: samples,
+    horizon: horizon,
+    lateGameThreshold: lateGameThreshold,
+    closeDecisionThreshold: closeDecisionThreshold,
+    fastFuture: fastFuture,
+  );
+
+  @override
+  TurnStrategy startTurn(GameState game) => _RolloutTurnStrategy(
+    game,
+    advisor,
+    samples,
+    horizon,
+    lateGameThreshold,
+    closeDecisionThreshold,
+    fastFuture,
+  );
+}
+
+class _RolloutTurnStrategy implements TurnStrategy {
+  final GameState game;
+  final TurnAdvisor advisor;
+  final int samples;
+  final int horizon;
+  final double lateGameThreshold;
+  final double closeDecisionThreshold;
+  final bool fastFuture;
+  final ScoringUtility fastFutureUtility;
+  final AdvisorTurnSession exactSession;
+
+  _RolloutTurnStrategy(
+    this.game,
+    this.advisor,
+    this.samples,
+    this.horizon,
+    this.lateGameThreshold,
+    this.closeDecisionThreshold,
+    this.fastFuture,
+  ) : exactSession = advisor.startTurn(game),
+      fastFutureUtility = ScoringUtility(weights: advisor.scoringUtility.weights);
+
+  @override
+  AdvisorAction chooseAction({required DiceRoll dice, required int rollsLeft}) {
+    if (!_isLateGame()) {
+      return exactSession.chooseBestAction(dice: dice, rollsLeft: rollsLeft) ??
+          (throw StateError('The Advisor did not find a legal action.'));
+    }
+    final recommendation = advisor.recommend(
+      dice: dice,
+      game: game,
+      rollsLeft: rollsLeft,
+    );
+    if (recommendation == null ||
+        recommendation.bestMove.action is! ScoreAdvisorAction) {
+      return recommendation?.bestMove.action ??
+          (throw StateError('The Advisor did not find a legal action.'));
+    }
+    final candidates = [
+      recommendation.bestMove,
+      ...recommendation.alternatives,
+    ].where((move) => move.action is ScoreAdvisorAction).toList();
+    if (candidates.length < 2) return recommendation.bestMove.action;
+    final bestStrategic = candidates.first.strategicValue;
+    final close = candidates
+        .where(
+          (move) =>
+              bestStrategic - move.strategicValue <= closeDecisionThreshold,
+        )
+        .take(3)
+        .toList();
+    if (close.length < 2) return recommendation.bestMove.action;
+
+    var selected = close.first;
+    var selectedValue = double.negativeInfinity;
+    for (final candidate in close) {
+      final option = (candidate.action as ScoreAdvisorAction).option;
+      final value = _rolloutValue(option, dice, rollsLeft);
+      if (value > selectedValue) {
+        selected = candidate;
+        selectedValue = value;
+      }
+    }
+    return selected.action;
+  }
+
+  double _rolloutValue(ScoringOption option, DiceRoll dice, int rollsLeft) {
+    final after = applyScoringOption(game, option);
+    final random = Random(_seed(option, dice, rollsLeft));
+    // Every sample already contains the score accumulated by the candidate
+    // option. Do not add the post-option total a second time; that diluted
+    // the rollout signal and made candidates with different immediate scores
+    // incomparable.
+    var total = 0.0;
+    for (var sample = 0; sample < samples; sample++) {
+      var state = after.copy();
+      for (var turn = 0; turn < horizon && !state.isComplete; turn++) {
+        var roll = _randomDice(random);
+        var remaining = 2;
+        final session = fastFuture
+            ? _FastAdvisorTurnStrategy(state, fastFutureUtility)
+            : advisor.startTurn(state);
+        while (true) {
+          final action = fastFuture
+              ? (session as _FastAdvisorTurnStrategy).chooseAction(
+                  dice: roll,
+                  rollsLeft: remaining,
+                )
+              : (session as AdvisorTurnSession).chooseBestAction(
+                  dice: roll,
+                  rollsLeft: remaining,
+                );
+          if (action == null) break;
+          if (action is ScoreAdvisorAction) {
+            state = applyScoringOption(state, action.option);
+            break;
+          }
+          if (remaining == 0) break;
+          if (action is! RerollAdvisorAction) break;
+          final indices = action.rerolledDieIndices;
+          final values = [...roll.values];
+          for (final index in indices) {
+            values[index] = random.nextInt(6) + 1;
+          }
+          roll = DiceRoll(values);
+          remaining--;
+        }
+      }
+      total += state.total;
+    }
+    return total / samples;
+  }
+
+  DiceRoll _randomDice(Random random) => DiceRoll([
+    for (var index = 0; index < DICE_COUNT; index++) random.nextInt(6) + 1,
+  ]);
+
+  int _seed(ScoringOption option, DiceRoll dice, int rollsLeft) =>
+      option.points * 1009 +
+      option.columnIndex * 97 +
+      (option.figure?.index ?? 0) * 31 +
+      dice.values.fold<int>(0, (sum, value) => sum * 7 + value) +
+      rollsLeft;
+
+  bool _isLateGame() {
+    var used = 0;
+    var total = 0;
+    for (final column in game.columns) {
+      used += column.school.values
+          .where((entry) => entry.status != FieldStatus.EMPTY)
+          .length;
+      used += column.figures.values
+          .where((entry) => entry.status != FieldStatus.EMPTY)
+          .length;
+      total += column.school.length + column.figures.length;
+    }
+    return total > 0 && used / total >= lateGameThreshold;
+  }
+}
+
 /// Lightweight heuristic strategy for broad, low-cost weight exploration.
 /// It is intentionally opt-in and must not be used as the production advisor.
 class FastAdvisorGameStrategy implements GameStrategy {
@@ -90,11 +284,15 @@ class _FastAdvisorTurnStrategy implements TurnStrategy {
     final options = legalOptions(dice, game, figuresFromHand: fromHand);
     if (options.isEmpty) throw StateError('No legal action available.');
 
-    final scored = [
-      for (final option in options)
-        (option: option, value: scoringUtility.evaluate(option, game)),
-    ]..sort((left, right) => right.value.compareTo(left.value));
-    final best = scored.first.option;
+    var best = options.first;
+    var bestValue = scoringUtility.evaluate(best, game);
+    for (final option in options.skip(1)) {
+      final value = scoringUtility.evaluate(option, game);
+      if (value > bestValue) {
+        best = option;
+        bestValue = value;
+      }
+    }
 
     // Take an already strong result. Otherwise keep only dice that support
     // the best current school/figure and use the remaining roll cheaply.

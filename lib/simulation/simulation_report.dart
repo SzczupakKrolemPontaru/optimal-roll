@@ -37,6 +37,21 @@ class SimulationReport {
   ScoreStatistics get figuresScoredFromHand =>
       ScoreStatistics.from(games.map((game) => game.figuresScoredFromHand));
 
+  List<int> get turnsByRollCount => [
+    for (var index = 0; index < 3; index++)
+      games.fold(0, (sum, game) => sum + game.turnsByRollCount[index]),
+  ];
+
+  Map<String, int> get scoreTypeCounts {
+    final counts = <String, int>{};
+    for (final game in games) {
+      for (final entry in game.scoreTypeCounts.entries) {
+        counts[entry.key] = (counts[entry.key] ?? 0) + entry.value;
+      }
+    }
+    return counts;
+  }
+
   Map<String, Object> toJson({bool includeGames = false}) => {
     'strategy': strategyName,
     'gameCount': gameCount,
@@ -52,6 +67,8 @@ class SimulationReport {
       'perfectColumnCount': perfectColumnCount.toJson(),
       'rollsMade': rollsMade.toJson(),
       'figuresScoredFromHand': figuresScoredFromHand.toJson(),
+      'turnsByRollCount': turnsByRollCount,
+      'scoreTypeCounts': scoreTypeCounts,
     },
     if (includeGames) 'games': games.map((game) => game.toJson()).toList(),
   };

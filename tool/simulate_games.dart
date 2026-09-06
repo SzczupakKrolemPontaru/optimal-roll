@@ -15,6 +15,13 @@ Future<void> main(List<String> arguments) async {
   final strategy = options.weightsPath == null
       ? switch (options.profile) {
           'default' => const AdvisorGameStrategy(),
+          'rollout' => RolloutAdvisorGameStrategy(
+            samples: options.rolloutSamples,
+            horizon: options.rolloutHorizon,
+            lateGameThreshold: options.rolloutLateThreshold,
+            closeDecisionThreshold: options.rolloutCloseThreshold,
+            fastFuture: true,
+          ),
           'greedy' => AdvisorGameStrategy.greedy(),
           'turn-score-only' => AdvisorGameStrategy.turnScoreOnly(),
           _ => throw FormatException('Unknown profile: ${options.profile}'),
@@ -137,11 +144,15 @@ Usage:
 Options:
   --games <count>       Number of games (default: 1)
   --seed <value>        First deterministic game seed (default: 1)
-  --profile <name>      default | greedy | turn-score-only (default: default)
+  --profile <name>      default | rollout | greedy | turn-score-only (default: default)
   --weights <path>      Load weights from an optimizer JSON result
   --workers <count>     Parallel isolates (default: 1)
   --compare-baseline    Compare against greedy on the same seeds
   --compare-default     Compare against current default weights
+  --rollout-samples <n> Number of rollout samples (default: 4)
+  --rollout-horizon <n> Future turns simulated (default: 1)
+  --rollout-late-threshold <x> Fraction of card filled before rollouts (default: 0.8)
+  --rollout-close-threshold <x> Strategic-value gap for rollout (default: 4)
   --json                Print machine-readable JSON
   --help                Show this help
 ''');
@@ -157,6 +168,10 @@ class _Options {
   final bool compareDefault;
   final bool json;
   final bool showHelp;
+  final int rolloutSamples;
+  final int rolloutHorizon;
+  final double rolloutLateThreshold;
+  final double rolloutCloseThreshold;
 
   const _Options({
     required this.games,
@@ -168,6 +183,10 @@ class _Options {
     required this.compareDefault,
     required this.json,
     required this.showHelp,
+    required this.rolloutSamples,
+    required this.rolloutHorizon,
+    required this.rolloutLateThreshold,
+    required this.rolloutCloseThreshold,
   });
 
   factory _Options.parse(List<String> arguments) {
@@ -175,11 +194,17 @@ class _Options {
     var seed = 1;
     var profile = 'default';
     String? weightsPath;
-    var workers = 1;
+    // Simulation is CPU-bound; use a small parallel default so large
+    // validation runs do not accidentally execute in one isolate.
+    var workers = 8;
     var compareBaseline = false;
     var compareDefault = false;
     var json = false;
     var showHelp = false;
+    var rolloutSamples = 4;
+    var rolloutHorizon = 1;
+    var rolloutLateThreshold = .8;
+    var rolloutCloseThreshold = 4.0;
 
     for (var index = 0; index < arguments.length; index++) {
       final argument = arguments[index];
@@ -200,13 +225,31 @@ class _Options {
           compareDefault = true;
         case '--json':
           json = true;
+        case '--rollout-samples':
+          rolloutSamples = int.parse(_nextValue(arguments, ++index, argument));
+        case '--rollout-horizon':
+          rolloutHorizon = int.parse(_nextValue(arguments, ++index, argument));
+        case '--rollout-late-threshold':
+          rolloutLateThreshold = double.parse(
+            _nextValue(arguments, ++index, argument),
+          );
+        case '--rollout-close-threshold':
+          rolloutCloseThreshold = double.parse(
+            _nextValue(arguments, ++index, argument),
+          );
         case '--help' || '-h':
           showHelp = true;
         default:
           throw FormatException('Unknown argument: $argument');
       }
     }
-    if (games <= 0 || workers <= 0) {
+    if (games <= 0 ||
+        workers <= 0 ||
+        rolloutSamples <= 0 ||
+        rolloutHorizon <= 0 ||
+        rolloutLateThreshold < 0 ||
+        rolloutLateThreshold > 1 ||
+        rolloutCloseThreshold < 0) {
       throw FormatException('--games and --workers must be positive.');
     }
     return _Options(
@@ -219,6 +262,10 @@ class _Options {
       compareDefault: compareDefault,
       json: json,
       showHelp: showHelp,
+      rolloutSamples: rolloutSamples,
+      rolloutHorizon: rolloutHorizon,
+      rolloutLateThreshold: rolloutLateThreshold,
+      rolloutCloseThreshold: rolloutCloseThreshold,
     );
   }
 }

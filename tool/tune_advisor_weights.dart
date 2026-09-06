@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:optimal_roll/domain/game_engine.dart';
 import 'package:optimal_roll/simulation/simulation.dart';
 
 Future<void> main(List<String> arguments) async {
@@ -12,9 +13,26 @@ Future<void> main(List<String> arguments) async {
     return;
   }
 
+  if (options.sensitivitySweep) {
+    await _runSensitivitySweep(options);
+    return;
+  }
+  if (options.pairwiseSweep) {
+    await _runPairwiseSweep(options);
+    return;
+  }
+
   await Directory(options.outputDirectory).create(recursive: true);
   final optimizer = const AdvisorWeightOptimizer();
   final runner = const SimulationRunner();
+  final resumeCandidates = options.resumePath == null
+      ? const <AdvisorWeightCandidate>[]
+      : await _loadResumeCandidates(options.resumePath!);
+  if (resumeCandidates.isNotEmpty) {
+    print(
+      'Loaded ${resumeCandidates.length} candidates from ${options.resumePath}.',
+    );
+  }
   final exploratoryResults = <WeightOptimizationResult>[];
 
   print(
@@ -48,6 +66,7 @@ Future<void> main(List<String> arguments) async {
         searchSpace: options.searchSpace,
       ),
       fastTraining: options.fastExploration,
+      initialCandidates: resumeCandidates,
       onProgress: (progress) {
         if (progress.candidateIndex != progress.populationSize) return;
         print(
@@ -69,7 +88,7 @@ Future<void> main(List<String> arguments) async {
     exploratoryResults.add(selectedResult);
     final path = '${options.outputDirectory}/$profileName.json';
     await File(path).writeAsString(
-      '${const JsonEncoder.withIndent('  ').convert(result.toJson())}\n',
+      '${const JsonEncoder.withIndent('  ').convert(selectedResult.toJson())}\n',
     );
     print(
       '  validation diff: '
@@ -174,6 +193,36 @@ Future<void> main(List<String> arguments) async {
   print('Saved tuning summary to $summaryPath');
 }
 
+Future<List<AdvisorWeightCandidate>> _loadResumeCandidates(String path) async {
+  final decoded = jsonDecode(await File(path).readAsString());
+  final candidates = <AdvisorWeightCandidate>[];
+
+  void visit(Object? node) {
+    if (node is Map) {
+      final weights = node['weights'];
+      if (weights is Map && weights.containsKey('openingColumnValue')) {
+        candidates.add(
+          AdvisorWeightCandidate.fromJson(Map<String, dynamic>.from(weights)),
+        );
+      }
+      for (final value in node.values) {
+        visit(value);
+      }
+    } else if (node is List) {
+      for (final value in node) {
+        visit(value);
+      }
+    }
+  }
+
+  visit(decoded);
+  final seen = <String>{};
+  return [
+    for (final candidate in candidates)
+      if (seen.add(candidate.cacheKey)) candidate,
+  ];
+}
+
 Future<WeightOptimizationResult> _exactlyRerankFastFinalists({
   required WeightOptimizationResult result,
   required SimulationRunner runner,
@@ -188,6 +237,15 @@ Future<WeightOptimizationResult> _exactlyRerankFastFinalists({
         name: '${result.profileName}-exact-training',
         weights: finalist.candidate.weights,
       ),
+      gameCount: games,
+      firstSeed: firstSeed,
+      workers: workers,
+    );
+  }
+  final baseline = AdvisorWeightCandidate.defaults();
+  if (!exactReports.containsKey(baseline)) {
+    exactReports[baseline] = await runner.runParallel(
+      strategy: const AdvisorGameStrategy(name: 'exact-training-baseline'),
       gameCount: games,
       firstSeed: firstSeed,
       workers: workers,
@@ -261,9 +319,18 @@ Options:
   --search-space <name>        standard or wide bounds (default: wide)
   --fast-exploration           Use the lightweight strategy during training
                                only; validation and holdout stay exact.
+  --sensitivity-sweep          Sweep selected weights one at a time on shared seeds
+  --pairwise-sweep             Sweep interactions between selected weight pairs
+  --pairwise-games <count>     Games per pairwise candidate (default: 100)
+  --pairwise-seed <value>      First seed for pairwise sweep (default: 101000000)
+  --pairwise-output <path>     Pairwise output path
+  --sweep-games <count>        Games per sensitivity candidate (default: 100)
+  --sweep-seed <value>         First seed for sensitivity sweep (default: 95000000)
+  --sweep-output <path>        Sensitivity output path
   --target-mean <score>        Reporting target (default: 1800)
   --profile-prefix <name>      Output profile prefix (default: advisor-tune)
   --output-dir <path>          Output directory (default: tool/results/tuning)
+  --resume <path>               Seed the next run from a previous JSON result
   --help                       Show this help
 ''');
 }
@@ -289,8 +356,17 @@ class _Options {
   final double targetMean;
   final String profilePrefix;
   final String outputDirectory;
+  final String? resumePath;
   final bool showHelp;
   final bool fastExploration;
+  final bool sensitivitySweep;
+  final int sweepGames;
+  final int sweepSeed;
+  final String sweepOutput;
+  final bool pairwiseSweep;
+  final int pairwiseGames;
+  final int pairwiseSeed;
+  final String pairwiseOutput;
 
   const _Options({
     required this.starts,
@@ -313,8 +389,17 @@ class _Options {
     required this.targetMean,
     required this.profilePrefix,
     required this.outputDirectory,
+    required this.resumePath,
     required this.showHelp,
     required this.fastExploration,
+    required this.sensitivitySweep,
+    required this.sweepGames,
+    required this.sweepSeed,
+    required this.sweepOutput,
+    required this.pairwiseSweep,
+    required this.pairwiseGames,
+    required this.pairwiseSeed,
+    required this.pairwiseOutput,
   });
 
   factory _Options.parse(List<String> arguments) {
@@ -338,8 +423,17 @@ class _Options {
     var targetMean = 1800.0;
     var profilePrefix = 'advisor-tune';
     var outputDirectory = 'tool/results/tuning';
+    String? resumePath;
     var showHelp = false;
     var fastExploration = false;
+    var sensitivitySweep = false;
+    var sweepGames = 100;
+    var sweepSeed = 95000000;
+    var sweepOutput = 'tool/results/sensitivity-sweep.json';
+    var pairwiseSweep = false;
+    var pairwiseGames = 100;
+    var pairwiseSeed = 101000000;
+    var pairwiseOutput = 'tool/results/pairwise-sweep.json';
 
     for (var index = 0; index < arguments.length; index++) {
       final argument = arguments[index];
@@ -392,10 +486,28 @@ class _Options {
           profilePrefix = _nextValue(arguments, ++index, argument);
         case '--output-dir':
           outputDirectory = _nextValue(arguments, ++index, argument);
+        case '--resume':
+          resumePath = _nextValue(arguments, ++index, argument);
         case '--help' || '-h':
           showHelp = true;
         case '--fast-exploration':
           fastExploration = true;
+        case '--sensitivity-sweep':
+          sensitivitySweep = true;
+        case '--sweep-games':
+          sweepGames = int.parse(_nextValue(arguments, ++index, argument));
+        case '--sweep-seed':
+          sweepSeed = int.parse(_nextValue(arguments, ++index, argument));
+        case '--sweep-output':
+          sweepOutput = _nextValue(arguments, ++index, argument);
+        case '--pairwise-sweep':
+          pairwiseSweep = true;
+        case '--pairwise-games':
+          pairwiseGames = int.parse(_nextValue(arguments, ++index, argument));
+        case '--pairwise-seed':
+          pairwiseSeed = int.parse(_nextValue(arguments, ++index, argument));
+        case '--pairwise-output':
+          pairwiseOutput = _nextValue(arguments, ++index, argument);
         default:
           throw FormatException('Unknown argument: $argument');
       }
@@ -413,6 +525,8 @@ class _Options {
         holdoutFinalists <= 0 ||
         holdoutFinalists > starts ||
         holdoutGames <= 0 ||
+        sweepGames <= 0 ||
+        pairwiseGames <= 0 ||
         seedStride <= 0 ||
         workers <= 0) {
       throw const FormatException('Counts must be positive and consistent.');
@@ -444,11 +558,404 @@ class _Options {
       targetMean: targetMean,
       profilePrefix: profilePrefix,
       outputDirectory: outputDirectory,
+      resumePath: resumePath,
       showHelp: showHelp,
       fastExploration: fastExploration,
+      sensitivitySweep: sensitivitySweep,
+      sweepGames: sweepGames,
+      sweepSeed: sweepSeed,
+      sweepOutput: sweepOutput,
+      pairwiseSweep: pairwiseSweep,
+      pairwiseGames: pairwiseGames,
+      pairwiseSeed: pairwiseSeed,
+      pairwiseOutput: pairwiseOutput,
     );
   }
 }
+
+Future<void> _runPairwiseSweep(_Options options) async {
+  final runner = const SimulationRunner();
+  final baseline = AdvisorWeightCandidate.defaults();
+  final baselineReport = await runner.runParallel(
+    strategy: AdvisorGameStrategy.withWeights(
+      name: 'pairwise-baseline',
+      weights: baseline.weights,
+    ),
+    gameCount: options.pairwiseGames,
+    firstSeed: options.pairwiseSeed,
+    workers: options.workers,
+  );
+  final figureRelativeValues = [.75, 1.0, 1.25];
+  final schoolValues = [0.0, 2.0, 5.0, 10.0];
+  final pairs = [
+    (Figure.PAIR, Figure.GREAT_STRAIGHT),
+    (Figure.PAIR, Figure.CHANCE),
+    (Figure.MARSHAL, Figure.GREAT_STRAIGHT),
+  ];
+  final results = <Map<String, Object>>[];
+  for (final pair in pairs) {
+    final leftBase =
+        baseline.figureOpportunityCosts[_pijolGroupForFigure(pair.$1)] ?? 0;
+    final rightBase =
+        baseline.figureOpportunityCosts[_pijolGroupForFigure(pair.$2)] ?? 0;
+    for (final leftMultiplier in figureRelativeValues) {
+      for (final rightMultiplier in figureRelativeValues) {
+        final candidate = _copyCandidate(
+          baseline,
+          figureSpecificOpportunityCosts: {
+            pair.$1: leftBase * leftMultiplier,
+            pair.$2: rightBase * rightMultiplier,
+          },
+        );
+        final report = await runner.runParallel(
+          strategy: AdvisorGameStrategy.withWeights(
+            name: 'pairwise-${pair.$1.name}-${pair.$2.name}',
+            weights: candidate.weights,
+          ),
+          gameCount: options.pairwiseGames,
+          firstSeed: options.pairwiseSeed,
+          workers: options.workers,
+        );
+        final comparison = StrategyComparison(
+          candidate: report,
+          baseline: baselineReport,
+        );
+        results.add({
+          'parameters': '${pair.$1.name} x ${pair.$2.name}',
+          'values': {
+            pair.$1.name: leftBase * leftMultiplier,
+            pair.$2.name: rightBase * rightMultiplier,
+          },
+          'comparison': comparison.toJson(),
+          'weights': candidate.toJson(),
+        });
+      }
+    }
+  }
+  for (final figureMultiplier in figureRelativeValues) {
+    for (final schoolValue in schoolValues) {
+      final candidate = _copyCandidate(
+        baseline,
+        figureSpecificOpportunityCosts: {
+          Figure.PAIR:
+              (baseline.figureOpportunityCosts[PijolFigureGroup.basic] ?? 0) *
+              figureMultiplier,
+        },
+        schoolFaceOpportunityCosts: {6: schoolValue},
+      );
+      final report = await runner.runParallel(
+        strategy: AdvisorGameStrategy.withWeights(
+          name: 'pairwise-pair-school6',
+          weights: candidate.weights,
+        ),
+        gameCount: options.pairwiseGames,
+        firstSeed: options.pairwiseSeed,
+        workers: options.workers,
+      );
+      final comparison = StrategyComparison(
+        candidate: report,
+        baseline: baselineReport,
+      );
+      results.add({
+        'parameters': 'PAIR x school[6]',
+        'values': {
+          'PAIR':
+              (baseline.figureOpportunityCosts[PijolFigureGroup.basic] ?? 0) *
+              figureMultiplier,
+          'school[6]': schoolValue,
+        },
+        'comparison': comparison.toJson(),
+        'weights': candidate.toJson(),
+      });
+    }
+  }
+  // The school target term changes the trade-off between school bonus and
+  // figure score. Test it together with the existing progress term; sweeping
+  // either scalar in isolation misses this interaction.
+  for (final targetWeight in [0.0, 2.0, 5.0, 10.0, 20.0]) {
+    for (final progressWeight in [0.0, 2.0, 4.0, 8.0]) {
+      final candidate = _copyCandidate(
+        baseline,
+        scalarOverrides: {
+          'schoolBonusTargetWeight': targetWeight,
+          'schoolBonusProgressWeight': progressWeight,
+        },
+      );
+      final report = await runner.runParallel(
+        strategy: AdvisorGameStrategy.withWeights(
+          name: 'pairwise-school-target-progress',
+          weights: candidate.weights,
+        ),
+        gameCount: options.pairwiseGames,
+        firstSeed: options.pairwiseSeed,
+        workers: options.workers,
+      );
+      final comparison = StrategyComparison(
+        candidate: report,
+        baseline: baselineReport,
+      );
+      results.add({
+        'parameters': 'schoolBonusTargetWeight x schoolBonusProgressWeight',
+        'values': {
+          'schoolBonusTargetWeight': targetWeight,
+          'schoolBonusProgressWeight': progressWeight,
+        },
+        'comparison': comparison.toJson(),
+        'weights': candidate.toJson(),
+      });
+    }
+  }
+  results.sort((left, right) {
+    final leftDiff =
+        (((left['comparison']! as Map)['scoreDifference'] as Map)['mean']
+                as num)
+            .toDouble();
+    final rightDiff =
+        (((right['comparison']! as Map)['scoreDifference'] as Map)['mean']
+                as num)
+            .toDouble();
+    return rightDiff.compareTo(leftDiff);
+  });
+  final file = File(options.pairwiseOutput);
+  await file.parent.create(recursive: true);
+  await file.writeAsString(
+    '${const JsonEncoder.withIndent('  ').convert({'baseline': baselineReport.toJson(), 'games': options.pairwiseGames, 'seed': options.pairwiseSeed, 'results': results})}\n',
+  );
+  print('Saved pairwise sweep to ${options.pairwiseOutput}');
+  for (final result in results.take(10)) {
+    final comparison = result['comparison']! as Map;
+    print(
+      '${result['parameters']} ${result['values']}: diff=${(comparison['scoreDifference'] as Map)['mean']}',
+    );
+  }
+}
+
+Future<void> _runSensitivitySweep(_Options options) async {
+  final runner = const SimulationRunner();
+  final baseline = AdvisorWeightCandidate.defaults();
+  final baselineReport = await runner.runParallel(
+    strategy: AdvisorGameStrategy.withWeights(
+      name: 'sensitivity-baseline',
+      weights: baseline.weights,
+    ),
+    gameCount: options.sweepGames,
+    firstSeed: options.sweepSeed,
+    workers: options.workers,
+  );
+  final relativeValues = [0.5, 0.75, 1.0, 1.25, 1.5];
+  final schoolValues = [0.0, 2.0, 5.0, 10.0, 20.0];
+  final figures = [
+    Figure.PAIR,
+    Figure.MARSHAL,
+    Figure.GREAT_STRAIGHT,
+    Figure.CHANCE,
+    Figure.SMALL,
+  ];
+  final candidates = <Map<String, Object>>[];
+  for (final figure in figures) {
+    final baseValue =
+        baseline.figureOpportunityCosts[_pijolGroupForFigure(figure)] ?? 0;
+    for (final multiplier in relativeValues) {
+      final value = baseValue * multiplier;
+      final candidate = _copyCandidate(
+        baseline,
+        figureSpecificOpportunityCosts: {figure: value},
+      );
+      final report = await runner.runParallel(
+        strategy: AdvisorGameStrategy.withWeights(
+          name: 'sweep-${figure.name}-$value',
+          weights: candidate.weights,
+        ),
+        gameCount: options.sweepGames,
+        firstSeed: options.sweepSeed,
+        workers: options.workers,
+      );
+      final comparison = StrategyComparison(
+        candidate: report,
+        baseline: baselineReport,
+      );
+      candidates.add({
+        'parameter': 'figureSpecificOpportunityCosts.${figure.name}',
+        'value': value,
+        'relativeToProduction': multiplier,
+        'report': report.toJson(),
+        'comparison': comparison.toJson(),
+        'weights': candidate.toJson(),
+      });
+    }
+  }
+  for (final face in [MIN_DIE_VALUE, MAX_DIE_VALUE]) {
+    for (final value in schoolValues) {
+      final candidate = _copyCandidate(
+        baseline,
+        schoolFaceOpportunityCosts: {face: value},
+      );
+      final report = await runner.runParallel(
+        strategy: AdvisorGameStrategy.withWeights(
+          name: 'sweep-school-$face-$value',
+          weights: candidate.weights,
+        ),
+        gameCount: options.sweepGames,
+        firstSeed: options.sweepSeed,
+        workers: options.workers,
+      );
+      final comparison = StrategyComparison(
+        candidate: report,
+        baseline: baselineReport,
+      );
+      candidates.add({
+        'parameter': 'schoolFaceOpportunityCosts.$face',
+        'value': value,
+        'report': report.toJson(),
+        'comparison': comparison.toJson(),
+        'weights': candidate.toJson(),
+      });
+    }
+  }
+  final scalarSweeps = <String, List<double>>{
+    'pijolBaseCost': [0, 5, 15, 30, 50],
+    'perfectColumnRiskCost': [30, 60, 90, 120, 150],
+    'perfectColumnProgressWeight': [0, 5, 10, 20, 30],
+    'schoolBonusProgressWeight': [2, 4, 8, 12, 16],
+    'futureFieldValueWeight': [.01, .03, .05, .1, .2],
+    'schoolPointWeight': [.05, .1, .2, .4, .8],
+    'schoolNegativePenaltyWeight': [.25, .5, 1, 2, 4],
+    'figureCompletionValueWeight': [2, 5, 10, 20, 40],
+    'rareFigureChaseWeight': [2, 5, 10, 20, 40],
+    'straightChaseWeight': [2, 5, 10, 20, 40],
+    'schoolBonusTargetWeight': [1, 2, 5, 10, 20],
+    'rerollValueWeight': [0, .1, .25, .5, 1, 2],
+    'rerollLowScoreWeight': [0, .5, 1, 2, 5, 10],
+    'openingColumnValue': [20, 36.64490059669705, 50, 70],
+    'chanceCostEarly': [20, 32.385866293107256, 50, 70],
+    'chanceCostLate': [10, 27.4009005750395, 40, 55],
+  };
+  for (final entry in scalarSweeps.entries) {
+    for (final value in entry.value) {
+      final candidate = _copyCandidate(
+        baseline,
+        scalarOverrides: {entry.key: value},
+      );
+      final report = await runner.runParallel(
+        strategy: AdvisorGameStrategy.withWeights(
+          name: 'sweep-${entry.key}-$value',
+          weights: candidate.weights,
+        ),
+        gameCount: options.sweepGames,
+        firstSeed: options.sweepSeed,
+        workers: options.workers,
+      );
+      final comparison = StrategyComparison(
+        candidate: report,
+        baseline: baselineReport,
+      );
+      candidates.add({
+        'parameter': entry.key,
+        'value': value,
+        'report': report.toJson(),
+        'comparison': comparison.toJson(),
+        'weights': candidate.toJson(),
+      });
+    }
+  }
+  candidates.sort((left, right) {
+    final leftDiff =
+        (((left['comparison']! as Map)['scoreDifference'] as Map)['mean']
+                as num)
+            .toDouble();
+    final rightDiff =
+        (((right['comparison']! as Map)['scoreDifference'] as Map)['mean']
+                as num)
+            .toDouble();
+    return rightDiff.compareTo(leftDiff);
+  });
+  final file = File(options.sweepOutput);
+  await file.parent.create(recursive: true);
+  await file.writeAsString(
+    '${const JsonEncoder.withIndent('  ').convert({'baseline': baselineReport.toJson(), 'games': options.sweepGames, 'seed': options.sweepSeed, 'candidates': candidates})}\n',
+  );
+  print('Saved sensitivity sweep to ${options.sweepOutput}');
+  for (final candidate in candidates.take(10)) {
+    final comparison = candidate['comparison']! as Map;
+    final difference = (comparison['scoreDifference'] as Map)['mean'];
+    print('${candidate['parameter']}=${candidate['value']}: diff=$difference');
+  }
+}
+
+PijolFigureGroup _pijolGroupForFigure(Figure figure) => switch (figure) {
+  Figure.PAIR ||
+  Figure.TWO_PAIRS ||
+  Figure.THREE_OF_A_KIND ||
+  Figure.FOUR_OF_A_KIND => PijolFigureGroup.basic,
+  Figure.GENERAL || Figure.MARSHAL => PijolFigureGroup.rare,
+  Figure.THREE_PAIRS ||
+  Figure.TWO_TRIPLES ||
+  Figure.FOUR_PLUS_TWO ||
+  Figure.FULL_HOUSE => PijolFigureGroup.compound,
+  Figure.SMALL_STRAIGHT ||
+  Figure.BIG_STRAIGHT ||
+  Figure.GREAT_STRAIGHT => PijolFigureGroup.straight,
+  Figure.EVEN || Figure.ODD => PijolFigureGroup.parity,
+  Figure.SMALL => PijolFigureGroup.small,
+  Figure.CHANCE => PijolFigureGroup.chance,
+};
+
+AdvisorWeightCandidate _copyCandidate(
+  AdvisorWeightCandidate source, {
+  Map<Figure, double>? figureSpecificOpportunityCosts,
+  Map<int, double>? schoolFaceOpportunityCosts,
+  Map<String, double>? scalarOverrides,
+}) => AdvisorWeightCandidate(
+  openingColumnValue:
+      scalarOverrides?['openingColumnValue'] ?? source.openingColumnValue,
+  chanceCostEarly:
+      scalarOverrides?['chanceCostEarly'] ?? source.chanceCostEarly,
+  chanceCostLate: scalarOverrides?['chanceCostLate'] ?? source.chanceCostLate,
+  rerollValueWeight:
+      scalarOverrides?['rerollValueWeight'] ?? source.rerollValueWeight,
+  rerollLowScoreWeight:
+      scalarOverrides?['rerollLowScoreWeight'] ?? source.rerollLowScoreWeight,
+  pijolBaseCost: scalarOverrides?['pijolBaseCost'] ?? source.pijolBaseCost,
+  perfectColumnRiskCost:
+      scalarOverrides?['perfectColumnRiskCost'] ?? source.perfectColumnRiskCost,
+  perfectColumnProgressWeight:
+      scalarOverrides?['perfectColumnProgressWeight'] ??
+      source.perfectColumnProgressWeight,
+  schoolBonusProgressWeight:
+      scalarOverrides?['schoolBonusProgressWeight'] ??
+      source.schoolBonusProgressWeight,
+  schoolCompletionValue:
+      scalarOverrides?['schoolCompletionValue'] ?? source.schoolCompletionValue,
+  futureFieldValueWeight:
+      scalarOverrides?['futureFieldValueWeight'] ??
+      source.futureFieldValueWeight,
+  schoolPointWeight:
+      scalarOverrides?['schoolPointWeight'] ?? source.schoolPointWeight,
+  schoolNegativePenaltyWeight:
+      scalarOverrides?['schoolNegativePenaltyWeight'] ??
+      source.schoolNegativePenaltyWeight,
+  figureCompletionValueWeight:
+      scalarOverrides?['figureCompletionValueWeight'] ??
+      source.figureCompletionValueWeight,
+  rareFigureChaseWeight:
+      scalarOverrides?['rareFigureChaseWeight'] ?? source.rareFigureChaseWeight,
+  straightChaseWeight:
+      scalarOverrides?['straightChaseWeight'] ?? source.straightChaseWeight,
+  schoolBonusTargetWeight:
+      scalarOverrides?['schoolBonusTargetWeight'] ??
+      source.schoolBonusTargetWeight,
+  earlyGameRiskMultiplier: source.earlyGameRiskMultiplier,
+  middleGameRiskMultiplier: source.middleGameRiskMultiplier,
+  lateGameRiskMultiplier: source.lateGameRiskMultiplier,
+  pijolScarcityWeight: source.pijolScarcityWeight,
+  figureOpportunityCosts: source.figureOpportunityCosts,
+  figureSpecificOpportunityCosts:
+      figureSpecificOpportunityCosts ?? source.figureSpecificOpportunityCosts,
+  schoolFaceOpportunityCosts:
+      schoolFaceOpportunityCosts ?? source.schoolFaceOpportunityCosts,
+  schoolOpeningFaceCosts: source.schoolOpeningFaceCosts,
+  pijolGroupCosts: source.pijolGroupCosts,
+);
 
 String _nextValue(List<String> arguments, int index, String option) {
   if (index >= arguments.length) {

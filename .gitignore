@@ -61,3 +61,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Generated offline simulation and tuning results
+/tool/results/

@@ -19,6 +19,8 @@ class GameSimulator {
     var rollsMade = 0;
     var diceRolled = 0;
     var figuresScoredFromHand = 0;
+    final turnsByRollCount = [0, 0, 0];
+    final scoreTypeCounts = <String, int>{};
 
     while (!game.isComplete && turnsPlayed < turnsToPlay) {
       final turnStrategy = strategy.startTurn(game);
@@ -35,6 +37,9 @@ class GameSimulator {
         );
         switch (action) {
           case ScoreAdvisorAction(:final option):
+            turnsByRollCount[rollIndex]++;
+            final scoreType = option.type.name;
+            scoreTypeCounts[scoreType] = (scoreTypeCounts[scoreType] ?? 0) + 1;
             // AdvisorGameStrategy obtains scoring moves directly from the
             // same legalOptions implementation used here. Recomputing all
             // scorecard options for every scored turn is a sizeable cost in
@@ -94,6 +99,8 @@ class GameSimulator {
       rollsMade: rollsMade,
       diceRolled: diceRolled,
       figuresScoredFromHand: figuresScoredFromHand,
+      turnsByRollCount: turnsByRollCount,
+      scoreTypeCounts: scoreTypeCounts,
     );
   }
 

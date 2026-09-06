@@ -8,6 +8,12 @@ class SimulationGameResult {
   final int diceRolled;
   final int figuresScoredFromHand;
 
+  /// Number of turns completed after the first, second and third roll.
+  final List<int> turnsByRollCount;
+
+  /// Number of scored moves grouped by scoring option type.
+  final Map<String, int> scoreTypeCounts;
+
   const SimulationGameResult({
     required this.seed,
     required this.finalState,
@@ -15,6 +21,8 @@ class SimulationGameResult {
     required this.rollsMade,
     required this.diceRolled,
     required this.figuresScoredFromHand,
+    this.turnsByRollCount = const [0, 0, 0],
+    this.scoreTypeCounts = const {},
   });
 
   int get totalScore => finalState.total;
@@ -66,5 +74,7 @@ class SimulationGameResult {
     'rollsMade': rollsMade,
     'diceRolled': diceRolled,
     'figuresScoredFromHand': figuresScoredFromHand,
+    'turnsByRollCount': turnsByRollCount,
+    'scoreTypeCounts': scoreTypeCounts,
   };
 }

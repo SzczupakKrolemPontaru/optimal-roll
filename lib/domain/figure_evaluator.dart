@@ -3,15 +3,10 @@ import 'dice_roll.dart';
 import 'figures.dart';
 
 Map<Figure, int> evaluateFigures(DiceRoll diceRoll) {
-  final diceCounts = diceRoll.counts;
-  final cacheKey = _countsKey(diceCounts);
-  return _figureScoresCache.putIfAbsent(
-    cacheKey,
-    () => Map.unmodifiable(_evaluateFigures(diceRoll, diceCounts)),
-  );
+  return _figureScoresTable[_countsKey(diceRoll.counts)]!;
 }
 
-Map<Figure, int> _evaluateFigures(DiceRoll diceRoll, List<int> diceCounts) {
+Map<Figure, int> _evaluateFigures(List<int> diceCounts) {
   final figureScores = <Figure, int>{};
   final pairFaces = [
     for (var faceIndex = 0; faceIndex < DICE_COUNT; faceIndex++)
@@ -27,7 +22,7 @@ Map<Figure, int> _evaluateFigures(DiceRoll diceRoll, List<int> diceCounts) {
         .fold(0, (total, faceValue) => total + faceValue * 2);
   }
   if (pairFaces.length >= 3) {
-    figureScores[Figure.THREE_PAIRS] = pairFaces
+    figureScores[Figure.THREE_PAIRS] = pairFaces.reversed
         .take(3)
         .fold(0, (total, faceValue) => total + faceValue * 2);
   }
@@ -73,29 +68,43 @@ Map<Figure, int> _evaluateFigures(DiceRoll diceRoll, List<int> diceCounts) {
   if (diceCounts.every((faceCount) => faceCount == 1)) {
     figureScores[Figure.GREAT_STRAIGHT] = GREAT_STRAIGHT_POINTS;
   }
-  if (diceRoll.values.every((dieValue) => dieValue.isEven)) {
-    figureScores[Figure.EVEN] = diceRoll.sum;
+  final sum = [
+    for (var index = 0; index < diceCounts.length; index++)
+      (index + MIN_DIE_VALUE) * diceCounts[index],
+  ].fold(0, (total, value) => total + value);
+  if ([1, 3, 5].every((face) => diceCounts[face - MIN_DIE_VALUE] == 0)) {
+    figureScores[Figure.EVEN] = sum;
   }
-  if (diceRoll.values.every((dieValue) => dieValue.isOdd)) {
-    figureScores[Figure.ODD] = diceRoll.sum;
+  if ([2, 4, 6].every((face) => diceCounts[face - MIN_DIE_VALUE] == 0)) {
+    figureScores[Figure.ODD] = sum;
   }
 
-  final tripleFaceIndex = diceCounts.indexWhere((faceCount) => faceCount >= 3);
-  var pairFaceIndex = -1;
-  for (var faceIndex = 0; faceIndex < DICE_COUNT; faceIndex++) {
-    if (faceIndex != tripleFaceIndex && diceCounts[faceIndex] >= 2) {
-      pairFaceIndex = faceIndex;
-      break;
+  var bestFullHouse = 0;
+  for (
+    var tripleFaceIndex = 0;
+    tripleFaceIndex < diceCounts.length;
+    tripleFaceIndex++
+  ) {
+    if (diceCounts[tripleFaceIndex] < 3) continue;
+    for (
+      var pairFaceIndex = 0;
+      pairFaceIndex < diceCounts.length;
+      pairFaceIndex++
+    ) {
+      if (pairFaceIndex == tripleFaceIndex || diceCounts[pairFaceIndex] < 2) {
+        continue;
+      }
+      final score = (tripleFaceIndex + 1) * 3 + (pairFaceIndex + 1) * 2;
+      if (score > bestFullHouse) bestFullHouse = score;
     }
   }
-  if (tripleFaceIndex >= 0 && pairFaceIndex >= 0) {
-    figureScores[Figure.FULL_HOUSE] =
-        (tripleFaceIndex + 1) * 3 + (pairFaceIndex + 1) * 2;
+  if (bestFullHouse > 0) {
+    figureScores[Figure.FULL_HOUSE] = bestFullHouse;
   }
-  if (diceRoll.sum <= 10) {
-    figureScores[Figure.SMALL] = 100 - 9 * diceRoll.sum;
+  if (sum <= 10) {
+    figureScores[Figure.SMALL] = 100 - 9 * sum;
   }
-  figureScores[Figure.CHANCE] = diceRoll.sum;
+  figureScores[Figure.CHANCE] = sum;
   return figureScores;
 }
 
@@ -107,4 +116,27 @@ int _countsKey(List<int> counts) {
   return key;
 }
 
-final Map<int, Map<Figure, int>> _figureScoresCache = {};
+final Map<int, Map<Figure, int>> _figureScoresTable = _buildFigureScoresTable();
+
+Map<int, Map<Figure, int>> _buildFigureScoresTable() {
+  final table = <int, Map<Figure, int>>{};
+  final counts = List.filled(MAX_DIE_VALUE, 0);
+
+  void visit(int faceIndex, int remaining) {
+    if (faceIndex == MAX_DIE_VALUE - 1) {
+      counts[faceIndex] = remaining;
+      final snapshot = List<int>.from(counts);
+      table[_countsKey(snapshot)] = Map.unmodifiable(
+        _evaluateFigures(snapshot),
+      );
+      return;
+    }
+    for (var count = 0; count <= remaining; count++) {
+      counts[faceIndex] = count;
+      visit(faceIndex + 1, remaining - count);
+    }
+  }
+
+  visit(0, DICE_COUNT);
+  return Map.unmodifiable(table);
+}

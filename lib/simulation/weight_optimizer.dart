@@ -30,6 +30,9 @@ class AdvisorWeightSearchSpace {
   final double openingColumnValueMax;
   final double chanceCostEarlyMax;
   final double chanceCostLateMax;
+  final double rerollValueWeightMax;
+  final double rerollValueWeightMin;
+  final double rerollLowScoreWeightMax;
   final double pijolBaseCostMax;
   final double perfectColumnRiskCostMax;
   final double schoolBonusProgressWeightMax;
@@ -38,14 +41,29 @@ class AdvisorWeightSearchSpace {
   final double phaseRiskMultiplierMin;
   final double phaseRiskMultiplierMax;
   final double pijolScarcityWeightMax;
+  final double figureOpportunityCostMin;
   final double figureOpportunityCostMax;
   final double schoolFaceOpportunityCostMax;
+  final double schoolOpeningFaceCostMin;
+  final double schoolOpeningFaceCostMax;
+  final double schoolBonusTargetWeightMax;
+  final double perfectColumnProgressWeightMax;
+  final double schoolPointWeightMax;
+  final double schoolNegativePenaltyWeightMax;
+  final double figureCompletionValueWeightMax;
+  final double rareFigureChaseWeightMax;
+  final double straightChaseWeightMax;
   final double futureFieldValueWeightMax;
+  final double figureSpecificOpportunityCostMax;
+  final double figureSpecificOpportunityCostMin;
 
   const AdvisorWeightSearchSpace({
     required this.openingColumnValueMax,
     required this.chanceCostEarlyMax,
     required this.chanceCostLateMax,
+    this.rerollValueWeightMax = 5,
+    this.rerollValueWeightMin = 0,
+    this.rerollLowScoreWeightMax = 10,
     required this.pijolBaseCostMax,
     required this.perfectColumnRiskCostMax,
     required this.schoolBonusProgressWeightMax,
@@ -54,9 +72,21 @@ class AdvisorWeightSearchSpace {
     this.phaseRiskMultiplierMin = .5,
     this.phaseRiskMultiplierMax = 1.5,
     this.pijolScarcityWeightMax = 20,
+    this.figureOpportunityCostMin = 0,
     this.figureOpportunityCostMax = 40,
     this.schoolFaceOpportunityCostMax = 40,
+    this.schoolOpeningFaceCostMin = -3,
+    this.schoolOpeningFaceCostMax = 3,
+    this.schoolBonusTargetWeightMax = 100,
+    this.perfectColumnProgressWeightMax = 100,
+    this.schoolPointWeightMax = 1,
+    this.schoolNegativePenaltyWeightMax = 20,
+    this.figureCompletionValueWeightMax = 40,
+    this.rareFigureChaseWeightMax = 40,
+    this.straightChaseWeightMax = 40,
     this.futureFieldValueWeightMax = 2,
+    this.figureSpecificOpportunityCostMax = 40,
+    this.figureSpecificOpportunityCostMin = 0,
   });
 
   static const standard = AdvisorWeightSearchSpace(
@@ -79,6 +109,9 @@ class AdvisorWeightSearchSpace {
     schoolBonusProgressWeightMax: 10,
     schoolCompletionValueMax: 80,
     pijolGroupCostMax: 200,
+    rerollValueWeightMin: -2,
+    figureOpportunityCostMin: -20,
+    figureSpecificOpportunityCostMin: -20,
   );
 
   List<String> boundaryHits(
@@ -104,6 +137,16 @@ class AdvisorWeightSearchSpace {
       'chanceCostEarly',
       candidate.chanceCostEarly,
       chanceCostEarlyMax,
+    );
+    addIfClose(
+      'rerollValueWeight',
+      candidate.rerollValueWeight,
+      rerollValueWeightMax,
+    );
+    addIfClose(
+      'rerollLowScoreWeight',
+      candidate.rerollLowScoreWeight,
+      rerollLowScoreWeightMax,
     );
     addIfClose('chanceCostLate', candidate.chanceCostLate, chanceCostLateMax);
     addIfClose('pijolBaseCost', candidate.pijolBaseCost, pijolBaseCostMax);
@@ -140,12 +183,59 @@ class AdvisorWeightSearchSpace {
         candidate.schoolFaceOpportunityCosts[face] ?? 0,
         schoolFaceOpportunityCostMax,
       );
+      addIfClose(
+        'schoolOpeningFaceCosts.$face',
+        candidate.schoolOpeningFaceCosts[face] ?? 0,
+        schoolOpeningFaceCostMax,
+      );
     }
     addIfClose(
       'futureFieldValueWeight',
       candidate.futureFieldValueWeight,
       futureFieldValueWeightMax,
     );
+    addIfClose(
+      'schoolBonusTargetWeight',
+      candidate.schoolBonusTargetWeight,
+      schoolBonusTargetWeightMax,
+    );
+    addIfClose(
+      'perfectColumnProgressWeight',
+      candidate.perfectColumnProgressWeight,
+      perfectColumnProgressWeightMax,
+    );
+    addIfClose(
+      'schoolPointWeight',
+      candidate.schoolPointWeight,
+      schoolPointWeightMax,
+    );
+    addIfClose(
+      'schoolNegativePenaltyWeight',
+      candidate.schoolNegativePenaltyWeight,
+      schoolNegativePenaltyWeightMax,
+    );
+    addIfClose(
+      'figureCompletionValueWeight',
+      candidate.figureCompletionValueWeight,
+      figureCompletionValueWeightMax,
+    );
+    addIfClose(
+      'rareFigureChaseWeight',
+      candidate.rareFigureChaseWeight,
+      rareFigureChaseWeightMax,
+    );
+    addIfClose(
+      'straightChaseWeight',
+      candidate.straightChaseWeight,
+      straightChaseWeightMax,
+    );
+    for (final figure in Figure.values) {
+      addIfClose(
+        'figureSpecificOpportunityCosts.${figure.name}',
+        candidate.figureSpecificOpportunityCosts[figure] ?? 0,
+        figureSpecificOpportunityCostMax,
+      );
+    }
     for (final group in PijolFigureGroup.values) {
       addIfClose(
         'pijolGroupCosts.${group.name}',
@@ -160,6 +250,9 @@ class AdvisorWeightSearchSpace {
     'openingColumnValueMax': openingColumnValueMax,
     'chanceCostEarlyMax': chanceCostEarlyMax,
     'chanceCostLateMax': chanceCostLateMax,
+    'rerollValueWeightMax': rerollValueWeightMax,
+    'rerollValueWeightMin': rerollValueWeightMin,
+    'rerollLowScoreWeightMax': rerollLowScoreWeightMax,
     'pijolBaseCostMax': pijolBaseCostMax,
     'perfectColumnRiskCostMax': perfectColumnRiskCostMax,
     'schoolBonusProgressWeightMax': schoolBonusProgressWeightMax,
@@ -168,9 +261,21 @@ class AdvisorWeightSearchSpace {
     'phaseRiskMultiplierMin': phaseRiskMultiplierMin,
     'phaseRiskMultiplierMax': phaseRiskMultiplierMax,
     'pijolScarcityWeightMax': pijolScarcityWeightMax,
+    'figureOpportunityCostMin': figureOpportunityCostMin,
     'figureOpportunityCostMax': figureOpportunityCostMax,
     'schoolFaceOpportunityCostMax': schoolFaceOpportunityCostMax,
+    'schoolOpeningFaceCostMin': schoolOpeningFaceCostMin,
+    'schoolOpeningFaceCostMax': schoolOpeningFaceCostMax,
+    'schoolBonusTargetWeightMax': schoolBonusTargetWeightMax,
+    'perfectColumnProgressWeightMax': perfectColumnProgressWeightMax,
+    'schoolPointWeightMax': schoolPointWeightMax,
+    'schoolNegativePenaltyWeightMax': schoolNegativePenaltyWeightMax,
+    'figureCompletionValueWeightMax': figureCompletionValueWeightMax,
+    'rareFigureChaseWeightMax': rareFigureChaseWeightMax,
+    'straightChaseWeightMax': straightChaseWeightMax,
     'futureFieldValueWeightMax': futureFieldValueWeightMax,
+    'figureSpecificOpportunityCostMax': figureSpecificOpportunityCostMax,
+    'figureSpecificOpportunityCostMin': figureSpecificOpportunityCostMin,
   };
 }
 
@@ -178,6 +283,8 @@ class AdvisorWeightCandidate {
   final double openingColumnValue;
   final double chanceCostEarly;
   final double chanceCostLate;
+  final double rerollValueWeight;
+  final double rerollLowScoreWeight;
   final double pijolBaseCost;
   final double perfectColumnRiskCost;
   final double schoolBonusProgressWeight;
@@ -187,14 +294,25 @@ class AdvisorWeightCandidate {
   final double lateGameRiskMultiplier;
   final double pijolScarcityWeight;
   final Map<PijolFigureGroup, double> figureOpportunityCosts;
+  final Map<Figure, double> figureSpecificOpportunityCosts;
   final Map<int, double> schoolFaceOpportunityCosts;
+  final Map<int, double> schoolOpeningFaceCosts;
   final double futureFieldValueWeight;
+  final double schoolBonusTargetWeight;
+  final double perfectColumnProgressWeight;
+  final double schoolPointWeight;
+  final double schoolNegativePenaltyWeight;
+  final double figureCompletionValueWeight;
+  final double rareFigureChaseWeight;
+  final double straightChaseWeight;
   final Map<PijolFigureGroup, double> pijolGroupCosts;
 
   const AdvisorWeightCandidate({
     required this.openingColumnValue,
     required this.chanceCostEarly,
     required this.chanceCostLate,
+    this.rerollValueWeight = 0,
+    this.rerollLowScoreWeight = 0,
     required this.pijolBaseCost,
     required this.perfectColumnRiskCost,
     this.schoolBonusProgressWeight = 0,
@@ -204,35 +322,109 @@ class AdvisorWeightCandidate {
     this.lateGameRiskMultiplier = 1,
     this.pijolScarcityWeight = 0,
     this.figureOpportunityCosts = const {},
+    this.figureSpecificOpportunityCosts = const {},
     this.schoolFaceOpportunityCosts = const {},
+    this.schoolOpeningFaceCosts = const {},
     this.futureFieldValueWeight = 0,
+    this.schoolBonusTargetWeight = 0,
+    this.perfectColumnProgressWeight = 0,
+    this.schoolPointWeight = 0,
+    this.schoolNegativePenaltyWeight = 0,
+    this.figureCompletionValueWeight = 0,
+    this.rareFigureChaseWeight = 0,
+    this.straightChaseWeight = 0,
     this.pijolGroupCosts = const {},
   });
 
+  AdvisorWeightCandidate copyWith({
+    double? openingColumnValue,
+    double? chanceCostEarly,
+    double? chanceCostLate,
+    double? rerollValueWeight,
+    double? rerollLowScoreWeight,
+    double? pijolBaseCost,
+    double? perfectColumnRiskCost,
+    double? schoolBonusProgressWeight,
+    double? schoolCompletionValue,
+    double? schoolNegativePenaltyWeight,
+    double? figureCompletionValueWeight,
+    double? rareFigureChaseWeight,
+    double? straightChaseWeight,
+    Map<int, double>? schoolOpeningFaceCosts,
+  }) => AdvisorWeightCandidate(
+    openingColumnValue: openingColumnValue ?? this.openingColumnValue,
+    chanceCostEarly: chanceCostEarly ?? this.chanceCostEarly,
+    chanceCostLate: chanceCostLate ?? this.chanceCostLate,
+    rerollValueWeight: rerollValueWeight ?? this.rerollValueWeight,
+    rerollLowScoreWeight: rerollLowScoreWeight ?? this.rerollLowScoreWeight,
+    pijolBaseCost: pijolBaseCost ?? this.pijolBaseCost,
+    perfectColumnRiskCost: perfectColumnRiskCost ?? this.perfectColumnRiskCost,
+    schoolBonusProgressWeight:
+        schoolBonusProgressWeight ?? this.schoolBonusProgressWeight,
+    schoolCompletionValue: schoolCompletionValue ?? this.schoolCompletionValue,
+    schoolNegativePenaltyWeight:
+        schoolNegativePenaltyWeight ?? this.schoolNegativePenaltyWeight,
+    figureCompletionValueWeight:
+        figureCompletionValueWeight ?? this.figureCompletionValueWeight,
+    rareFigureChaseWeight: rareFigureChaseWeight ?? this.rareFigureChaseWeight,
+    straightChaseWeight: straightChaseWeight ?? this.straightChaseWeight,
+    earlyGameRiskMultiplier: earlyGameRiskMultiplier,
+    middleGameRiskMultiplier: middleGameRiskMultiplier,
+    lateGameRiskMultiplier: lateGameRiskMultiplier,
+    pijolScarcityWeight: pijolScarcityWeight,
+    figureOpportunityCosts: figureOpportunityCosts,
+    figureSpecificOpportunityCosts: figureSpecificOpportunityCosts,
+    schoolFaceOpportunityCosts: schoolFaceOpportunityCosts,
+    schoolOpeningFaceCosts:
+        schoolOpeningFaceCosts ?? this.schoolOpeningFaceCosts,
+    futureFieldValueWeight: futureFieldValueWeight,
+    schoolBonusTargetWeight: schoolBonusTargetWeight,
+    perfectColumnProgressWeight: perfectColumnProgressWeight,
+    schoolPointWeight: schoolPointWeight,
+    pijolGroupCosts: pijolGroupCosts,
+  );
+
   factory AdvisorWeightCandidate.defaults() {
     const weights = AdvisorWeights();
+    final groupedOpportunityCosts = {
+      for (final group in PijolFigureGroup.values)
+        group:
+            weights.fieldOpportunityCosts[Figure.values.firstWhere(
+              (figure) => pijolGroupFor(figure) == group,
+            )] ??
+            0,
+    };
     return AdvisorWeightCandidate(
       openingColumnValue: weights.openingColumnValue,
       chanceCostEarly: weights.chanceCostEarly,
       chanceCostLate: weights.chanceCostLate,
+      rerollValueWeight: weights.rerollValueWeight,
+      rerollLowScoreWeight: weights.rerollLowScoreWeight,
       pijolBaseCost: weights.pijolBaseCost,
       perfectColumnRiskCost: weights.perfectColumnRiskCost,
       schoolBonusProgressWeight: weights.schoolBonusProgressWeight,
       schoolCompletionValue: weights.schoolCompletionValue,
+      schoolNegativePenaltyWeight: weights.schoolNegativePenaltyWeight,
+      figureCompletionValueWeight: weights.figureCompletionValueWeight,
+      rareFigureChaseWeight: weights.rareFigureChaseWeight,
+      straightChaseWeight: weights.straightChaseWeight,
       earlyGameRiskMultiplier: weights.earlyGameRiskMultiplier,
       middleGameRiskMultiplier: weights.middleGameRiskMultiplier,
       lateGameRiskMultiplier: weights.lateGameRiskMultiplier,
       pijolScarcityWeight: weights.pijolScarcityWeight,
-      figureOpportunityCosts: {
-        for (final group in PijolFigureGroup.values)
-          group:
-              weights.fieldOpportunityCosts[Figure.values.firstWhere(
-                (figure) => pijolGroupFor(figure) == group,
-              )] ??
-              0,
-      },
+      figureOpportunityCosts: groupedOpportunityCosts,
       schoolFaceOpportunityCosts: weights.schoolFaceOpportunityCosts,
+      schoolOpeningFaceCosts: weights.schoolOpeningFaceCosts,
       futureFieldValueWeight: weights.futureFieldValueWeight,
+      schoolBonusTargetWeight: weights.schoolBonusTargetWeight,
+      perfectColumnProgressWeight: weights.perfectColumnProgressWeight,
+      schoolPointWeight: weights.schoolPointWeight,
+      figureSpecificOpportunityCosts: {
+        for (final figure in Figure.values)
+          if (weights.fieldOpportunityCosts[figure] !=
+              groupedOpportunityCosts[pijolGroupFor(figure)])
+            figure: weights.fieldOpportunityCosts[figure] ?? 0,
+      },
       pijolGroupCosts: {
         for (final group in PijolFigureGroup.values)
           group:
@@ -265,9 +457,17 @@ class AdvisorWeightCandidate {
     final opportunityGroups = opportunityJson is Map
         ? Map<String, dynamic>.from(opportunityJson)
         : const <String, dynamic>{};
+    final specificJson = source['figureSpecificOpportunityCosts'];
+    final specificCosts = specificJson is Map
+        ? Map<String, dynamic>.from(specificJson)
+        : const <String, dynamic>{};
     final schoolJson = source['schoolFaceOpportunityCosts'];
     final schoolCosts = schoolJson is Map
         ? Map<String, dynamic>.from(schoolJson)
+        : const <String, dynamic>{};
+    final schoolOpeningJson = source['schoolOpeningFaceCosts'];
+    final schoolOpeningCosts = schoolOpeningJson is Map
+        ? Map<String, dynamic>.from(schoolOpeningJson)
         : const <String, dynamic>{};
     const defaults = AdvisorWeights();
     return AdvisorWeightCandidate(
@@ -285,6 +485,16 @@ class AdvisorWeightCandidate {
         source,
         'chanceCostLate',
         defaults.chanceCostLate,
+      ),
+      rerollValueWeight: _jsonDouble(
+        source,
+        'rerollValueWeight',
+        defaults.rerollValueWeight,
+      ),
+      rerollLowScoreWeight: _jsonDouble(
+        source,
+        'rerollLowScoreWeight',
+        defaults.rerollLowScoreWeight,
       ),
       pijolBaseCost: _jsonDouble(
         source,
@@ -334,11 +544,60 @@ class AdvisorWeightCandidate {
         for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
           face: _jsonDouble(schoolCosts, '$face', 0),
       },
+      schoolOpeningFaceCosts: {
+        for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+          face: _jsonDouble(
+            schoolOpeningCosts,
+            '$face',
+            defaults.schoolOpeningFaceCosts[face] ?? 0,
+          ),
+      },
       futureFieldValueWeight: _jsonDouble(
         source,
         'futureFieldValueWeight',
         defaults.futureFieldValueWeight,
       ),
+      schoolBonusTargetWeight: _jsonDouble(
+        source,
+        'schoolBonusTargetWeight',
+        defaults.schoolBonusTargetWeight,
+      ),
+      perfectColumnProgressWeight: _jsonDouble(
+        source,
+        'perfectColumnProgressWeight',
+        defaults.perfectColumnProgressWeight,
+      ),
+      schoolPointWeight: _jsonDouble(
+        source,
+        'schoolPointWeight',
+        defaults.schoolPointWeight,
+      ),
+      schoolNegativePenaltyWeight: _jsonDouble(
+        source,
+        'schoolNegativePenaltyWeight',
+        defaults.schoolNegativePenaltyWeight,
+      ),
+      figureCompletionValueWeight: _jsonDouble(
+        source,
+        'figureCompletionValueWeight',
+        defaults.figureCompletionValueWeight,
+      ),
+      rareFigureChaseWeight: _jsonDouble(
+        source,
+        'rareFigureChaseWeight',
+        defaults.rareFigureChaseWeight,
+      ),
+      straightChaseWeight: _jsonDouble(
+        source,
+        'straightChaseWeight',
+        defaults.straightChaseWeight,
+      ),
+      figureSpecificOpportunityCosts: {
+        for (final entry in specificCosts.entries)
+          if (Figure.values.any((figure) => figure.name == entry.key))
+            Figure.values.firstWhere((figure) => figure.name == entry.key):
+                _jsonDouble(specificCosts, entry.key, 0),
+      },
       pijolGroupCosts: {
         for (final group in PijolFigureGroup.values)
           group: _jsonDouble(groups, group.name, 0),
@@ -350,6 +609,8 @@ class AdvisorWeightCandidate {
     openingColumnValue: openingColumnValue,
     chanceCostEarly: chanceCostEarly,
     chanceCostLate: chanceCostLate,
+    rerollValueWeight: rerollValueWeight,
+    rerollLowScoreWeight: rerollLowScoreWeight,
     pijolBaseCost: pijolBaseCost,
     perfectColumnRiskCost: perfectColumnRiskCost,
     schoolBonusProgressWeight: schoolBonusProgressWeight,
@@ -360,10 +621,21 @@ class AdvisorWeightCandidate {
     pijolScarcityWeight: pijolScarcityWeight,
     fieldOpportunityCosts: {
       for (final figure in Figure.values)
-        figure: figureOpportunityCosts[pijolGroupFor(figure)] ?? 0,
+        figure:
+            figureSpecificOpportunityCosts[figure] ??
+            figureOpportunityCosts[pijolGroupFor(figure)] ??
+            0,
     },
     schoolFaceOpportunityCosts: schoolFaceOpportunityCosts,
+    schoolOpeningFaceCosts: schoolOpeningFaceCosts,
     futureFieldValueWeight: futureFieldValueWeight,
+    schoolBonusTargetWeight: schoolBonusTargetWeight,
+    perfectColumnProgressWeight: perfectColumnProgressWeight,
+    schoolPointWeight: schoolPointWeight,
+    schoolNegativePenaltyWeight: schoolNegativePenaltyWeight,
+    figureCompletionValueWeight: figureCompletionValueWeight,
+    rareFigureChaseWeight: rareFigureChaseWeight,
+    straightChaseWeight: straightChaseWeight,
     pijolFieldCosts: {
       for (final figure in Figure.values)
         figure: pijolGroupCosts[pijolGroupFor(figure)] ?? 0,
@@ -374,6 +646,8 @@ class AdvisorWeightCandidate {
     openingColumnValue,
     chanceCostEarly,
     chanceCostLate,
+    rerollValueWeight,
+    rerollLowScoreWeight,
     pijolBaseCost,
     perfectColumnRiskCost,
     schoolBonusProgressWeight,
@@ -386,7 +660,18 @@ class AdvisorWeightCandidate {
       figureOpportunityCosts[group] ?? 0,
     for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
       schoolFaceOpportunityCosts[face] ?? 0,
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+      schoolOpeningFaceCosts[face] ?? 0,
     futureFieldValueWeight,
+    schoolBonusTargetWeight,
+    perfectColumnProgressWeight,
+    schoolPointWeight,
+    schoolNegativePenaltyWeight,
+    figureCompletionValueWeight,
+    rareFigureChaseWeight,
+    straightChaseWeight,
+    for (final figure in Figure.values)
+      figureSpecificOpportunityCosts[figure] ?? 0,
     for (final group in PijolFigureGroup.values) pijolGroupCosts[group] ?? 0,
   ].map((value) => value.toStringAsFixed(8)).join('|');
 
@@ -394,6 +679,8 @@ class AdvisorWeightCandidate {
     'openingColumnValue': openingColumnValue,
     'chanceCostEarly': chanceCostEarly,
     'chanceCostLate': chanceCostLate,
+    'rerollValueWeight': rerollValueWeight,
+    'rerollLowScoreWeight': rerollLowScoreWeight,
     'pijolBaseCost': pijolBaseCost,
     'perfectColumnRiskCost': perfectColumnRiskCost,
     'schoolBonusProgressWeight': schoolBonusProgressWeight,
@@ -410,7 +697,22 @@ class AdvisorWeightCandidate {
       for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
         '$face': schoolFaceOpportunityCosts[face] ?? 0,
     },
+    'schoolOpeningFaceCosts': {
+      for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+        '$face': schoolOpeningFaceCosts[face] ?? 0,
+    },
     'futureFieldValueWeight': futureFieldValueWeight,
+    'schoolBonusTargetWeight': schoolBonusTargetWeight,
+    'perfectColumnProgressWeight': perfectColumnProgressWeight,
+    'schoolPointWeight': schoolPointWeight,
+    'schoolNegativePenaltyWeight': schoolNegativePenaltyWeight,
+    'figureCompletionValueWeight': figureCompletionValueWeight,
+    'rareFigureChaseWeight': rareFigureChaseWeight,
+    'straightChaseWeight': straightChaseWeight,
+    'figureSpecificOpportunityCosts': {
+      for (final entry in figureSpecificOpportunityCosts.entries)
+        if (entry.value != 0) entry.key.name: entry.value,
+    },
     'pijolGroupCosts': {
       for (final group in PijolFigureGroup.values)
         group.name: pijolGroupCosts[group] ?? 0,
@@ -643,6 +945,7 @@ class AdvisorWeightOptimizer {
     WeightOptimizerOptions options = const WeightOptimizerOptions(),
     String profileName = 'optimized-v2',
     bool fastTraining = false,
+    List<AdvisorWeightCandidate> initialCandidates = const [],
     OptimizationProgressCallback? onProgress,
   }) async {
     options.validate();
@@ -651,6 +954,7 @@ class AdvisorWeightOptimizer {
       options.populationSize,
       random,
       options.searchSpace,
+      initialCandidates,
     );
     final reportCache = <String, SimulationReport>{};
     final bestScoreByGeneration = <double>[];
@@ -736,6 +1040,18 @@ class AdvisorWeightOptimizer {
       finalRanking,
       options.validationCandidateCount,
     );
+    final baselineCandidate = AdvisorWeightCandidate.defaults();
+    final baselineTraining = reportCache[baselineCandidate.cacheKey];
+    if (baselineTraining != null &&
+        !finalists.any(
+          (finalist) =>
+              finalist.candidate.cacheKey == baselineCandidate.cacheKey,
+        )) {
+      if (finalists.length >= options.validationCandidateCount) {
+        finalists.removeLast();
+      }
+      finalists.add(_EvaluatedCandidate(baselineCandidate, baselineTraining));
+    }
     final validated = <ValidatedWeightCandidate>[];
     for (var index = 0; index < finalists.length; index++) {
       final finalist = finalists[index];
@@ -819,12 +1135,26 @@ List<AdvisorWeightCandidate> _initialPopulation(
   int size,
   Random random,
   AdvisorWeightSearchSpace searchSpace,
-) => [
-  AdvisorWeightCandidate.defaults(),
-  AdvisorWeightCandidate.zero(),
-  for (var index = 2; index < size; index++)
-    _randomCandidate(random, searchSpace),
-];
+  List<AdvisorWeightCandidate> initialCandidates,
+) {
+  final population = <AdvisorWeightCandidate>[];
+  final seen = <String>{};
+  void add(AdvisorWeightCandidate candidate) {
+    if (population.length < size && seen.add(candidate.cacheKey)) {
+      population.add(candidate);
+    }
+  }
+
+  for (final candidate in initialCandidates) {
+    add(candidate);
+  }
+  add(AdvisorWeightCandidate.defaults());
+  add(AdvisorWeightCandidate.zero());
+  while (population.length < size) {
+    add(_randomCandidate(random, searchSpace));
+  }
+  return population;
+}
 
 int _trainingGamesForGeneration(
   WeightOptimizerOptions options,
@@ -875,12 +1205,19 @@ List<AdvisorWeightCandidate> _nextGeneration(
   return [
     for (final elite in elites) elite.candidate,
     for (var index = eliteCount; index < populationSize; index++)
-      _mutate(
-        elites[random.nextInt(elites.length)].candidate,
-        random,
-        mutationScale,
-        searchSpace,
-      ),
+      index.isEven
+          ? _coordinateMutate(
+              elites[random.nextInt(elites.length)].candidate,
+              random,
+              mutationScale,
+              searchSpace,
+            )
+          : _mutate(
+              elites[random.nextInt(elites.length)].candidate,
+              random,
+              mutationScale,
+              searchSpace,
+            ),
   ];
 }
 
@@ -891,6 +1228,13 @@ AdvisorWeightCandidate _randomCandidate(
   openingColumnValue: random.nextDouble() * searchSpace.openingColumnValueMax,
   chanceCostEarly: random.nextDouble() * searchSpace.chanceCostEarlyMax,
   chanceCostLate: random.nextDouble() * searchSpace.chanceCostLateMax,
+  rerollValueWeight: _randomInRange(
+    random,
+    searchSpace.rerollValueWeightMin,
+    searchSpace.rerollValueWeightMax,
+  ),
+  rerollLowScoreWeight:
+      random.nextDouble() * searchSpace.rerollLowScoreWeightMax,
   pijolBaseCost: random.nextDouble() * searchSpace.pijolBaseCostMax,
   perfectColumnRiskCost:
       random.nextDouble() * searchSpace.perfectColumnRiskCostMax,
@@ -916,19 +1260,131 @@ AdvisorWeightCandidate _randomCandidate(
   pijolScarcityWeight: random.nextDouble() * searchSpace.pijolScarcityWeightMax,
   figureOpportunityCosts: {
     for (final group in PijolFigureGroup.values)
-      group: random.nextDouble() * searchSpace.figureOpportunityCostMax,
+      group: _randomInRange(
+        random,
+        searchSpace.figureOpportunityCostMin,
+        searchSpace.figureOpportunityCostMax,
+      ),
   },
   schoolFaceOpportunityCosts: {
     for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
       face: random.nextDouble() * searchSpace.schoolFaceOpportunityCostMax,
   },
+  schoolOpeningFaceCosts: {
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+      face: _randomInRange(
+        random,
+        searchSpace.schoolOpeningFaceCostMin,
+        searchSpace.schoolOpeningFaceCostMax,
+      ),
+  },
   futureFieldValueWeight:
       random.nextDouble() * searchSpace.futureFieldValueWeightMax,
+  schoolBonusTargetWeight:
+      random.nextDouble() * searchSpace.schoolBonusTargetWeightMax,
+  perfectColumnProgressWeight:
+      random.nextDouble() * searchSpace.perfectColumnProgressWeightMax,
+  schoolPointWeight: random.nextDouble() * searchSpace.schoolPointWeightMax,
+  schoolNegativePenaltyWeight:
+      random.nextDouble() * searchSpace.schoolNegativePenaltyWeightMax,
+  figureCompletionValueWeight:
+      random.nextDouble() * searchSpace.figureCompletionValueWeightMax,
+  rareFigureChaseWeight:
+      random.nextDouble() * searchSpace.rareFigureChaseWeightMax,
+  straightChaseWeight: random.nextDouble() * searchSpace.straightChaseWeightMax,
+  figureSpecificOpportunityCosts: const {},
   pijolGroupCosts: {
     for (final group in PijolFigureGroup.values)
       group: random.nextDouble() * searchSpace.pijolGroupCostMax,
   },
 );
+
+AdvisorWeightCandidate _coordinateMutate(
+  AdvisorWeightCandidate parent,
+  Random random,
+  double scale,
+  AdvisorWeightSearchSpace searchSpace,
+) {
+  double mutate(double value, double maximum) =>
+      _mutated(value, maximum, random, scale);
+  return switch (random.nextInt(13)) {
+    0 => parent.copyWith(
+      openingColumnValue: mutate(
+        parent.openingColumnValue,
+        searchSpace.openingColumnValueMax,
+      ),
+    ),
+    1 => parent.copyWith(
+      chanceCostEarly: mutate(
+        parent.chanceCostEarly,
+        searchSpace.chanceCostEarlyMax,
+      ),
+    ),
+    2 => parent.copyWith(
+      chanceCostLate: mutate(
+        parent.chanceCostLate,
+        searchSpace.chanceCostLateMax,
+      ),
+    ),
+    3 => parent.copyWith(
+      rerollValueWeight: mutate(
+        parent.rerollValueWeight,
+        searchSpace.rerollValueWeightMax,
+      ),
+    ),
+    4 => parent.copyWith(
+      rerollLowScoreWeight: mutate(
+        parent.rerollLowScoreWeight,
+        searchSpace.rerollLowScoreWeightMax,
+      ),
+    ),
+    5 => parent.copyWith(
+      pijolBaseCost: mutate(parent.pijolBaseCost, searchSpace.pijolBaseCostMax),
+    ),
+    6 => parent.copyWith(
+      perfectColumnRiskCost: mutate(
+        parent.perfectColumnRiskCost,
+        searchSpace.perfectColumnRiskCostMax,
+      ),
+    ),
+    7 => parent.copyWith(
+      schoolBonusProgressWeight: mutate(
+        parent.schoolBonusProgressWeight,
+        searchSpace.schoolBonusProgressWeightMax,
+      ),
+    ),
+    8 => parent.copyWith(
+      schoolNegativePenaltyWeight: mutate(
+        parent.schoolNegativePenaltyWeight,
+        searchSpace.schoolNegativePenaltyWeightMax,
+      ),
+    ),
+    9 => parent.copyWith(
+      figureCompletionValueWeight: mutate(
+        parent.figureCompletionValueWeight,
+        searchSpace.figureCompletionValueWeightMax,
+      ),
+    ),
+    10 => parent.copyWith(
+      rareFigureChaseWeight: mutate(
+        parent.rareFigureChaseWeight,
+        searchSpace.rareFigureChaseWeightMax,
+      ),
+    ),
+    11 => parent.copyWith(
+      straightChaseWeight: mutate(
+        parent.straightChaseWeight,
+        searchSpace.straightChaseWeightMax,
+      ),
+    ),
+    _ => parent.copyWith(
+      schoolCompletionValue: mutate(
+        parent.schoolCompletionValue,
+        searchSpace.schoolCompletionValueMax,
+      ),
+    ),
+  };
+}
 
 AdvisorWeightCandidate _mutate(
   AdvisorWeightCandidate parent,
@@ -951,6 +1407,19 @@ AdvisorWeightCandidate _mutate(
   chanceCostLate: _mutated(
     parent.chanceCostLate,
     searchSpace.chanceCostLateMax,
+    random,
+    scale,
+  ),
+  rerollValueWeight: _mutatedRange(
+    parent.rerollValueWeight,
+    searchSpace.rerollValueWeightMin,
+    searchSpace.rerollValueWeightMax,
+    random,
+    scale,
+  ),
+  rerollLowScoreWeight: _mutated(
+    parent.rerollLowScoreWeight,
+    searchSpace.rerollLowScoreWeightMax,
     random,
     scale,
   ),
@@ -1007,8 +1476,9 @@ AdvisorWeightCandidate _mutate(
   ),
   figureOpportunityCosts: {
     for (final group in PijolFigureGroup.values)
-      group: _mutated(
+      group: _mutatedRange(
         parent.figureOpportunityCosts[group] ?? 0,
+        searchSpace.figureOpportunityCostMin,
         searchSpace.figureOpportunityCostMax,
         random,
         scale,
@@ -1023,12 +1493,76 @@ AdvisorWeightCandidate _mutate(
         scale,
       ),
   },
+  schoolOpeningFaceCosts: {
+    for (var face = MIN_DIE_VALUE; face <= MAX_DIE_VALUE; face++)
+      face: _mutatedRange(
+        parent.schoolOpeningFaceCosts[face] ?? 0,
+        searchSpace.schoolOpeningFaceCostMin,
+        searchSpace.schoolOpeningFaceCostMax,
+        random,
+        scale,
+      ),
+  },
   futureFieldValueWeight: _mutated(
     parent.futureFieldValueWeight,
     searchSpace.futureFieldValueWeightMax,
     random,
     scale,
   ),
+  schoolBonusTargetWeight: _mutated(
+    parent.schoolBonusTargetWeight,
+    searchSpace.schoolBonusTargetWeightMax,
+    random,
+    scale,
+  ),
+  perfectColumnProgressWeight: _mutated(
+    parent.perfectColumnProgressWeight,
+    searchSpace.perfectColumnProgressWeightMax,
+    random,
+    scale,
+  ),
+  schoolPointWeight: _mutated(
+    parent.schoolPointWeight,
+    searchSpace.schoolPointWeightMax,
+    random,
+    scale,
+  ),
+  schoolNegativePenaltyWeight: _mutated(
+    parent.schoolNegativePenaltyWeight,
+    searchSpace.schoolNegativePenaltyWeightMax,
+    random,
+    scale,
+  ),
+  figureCompletionValueWeight: _mutated(
+    parent.figureCompletionValueWeight,
+    searchSpace.figureCompletionValueWeightMax,
+    random,
+    scale,
+  ),
+  rareFigureChaseWeight: _mutated(
+    parent.rareFigureChaseWeight,
+    searchSpace.rareFigureChaseWeightMax,
+    random,
+    scale,
+  ),
+  straightChaseWeight: _mutated(
+    parent.straightChaseWeight,
+    searchSpace.straightChaseWeightMax,
+    random,
+    scale,
+  ),
+  figureSpecificOpportunityCosts: parent.figureSpecificOpportunityCosts.isEmpty
+      ? const {}
+      : {
+          for (final figure in Figure.values)
+            figure: _mutatedRange(
+              parent.figureSpecificOpportunityCosts[figure] ?? 0,
+              searchSpace.figureSpecificOpportunityCostMin,
+              searchSpace.figureSpecificOpportunityCostMax,
+              random,
+              scale,
+            ),
+        },
   pijolGroupCosts: {
     for (final group in PijolFigureGroup.values)
       group: _mutated(
