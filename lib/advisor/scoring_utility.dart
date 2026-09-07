@@ -1,10 +1,23 @@
 import '../domain/game_engine.dart';
 import 'advisor_weights.dart';
+import 'state_value_model.dart';
 
 class ScoringUtility {
   final AdvisorWeights weights;
+  final StateValueModel? stateValueModel;
+  final double stateValueWeight;
+  final ActionValueModel? actionValueModel;
+  final PhasedActionValueModel? phasedActionValueModel;
+  final double actionValueWeight;
 
-  const ScoringUtility({this.weights = const AdvisorWeights()});
+  const ScoringUtility({
+    this.weights = const AdvisorWeights(),
+    this.stateValueModel,
+    this.stateValueWeight = 0,
+    this.actionValueModel,
+    this.phasedActionValueModel,
+    this.actionValueWeight = 0,
+  });
 
   double evaluate(ScoringOption option, GameState game) {
     final column = game.columns[option.columnIndex];
@@ -100,6 +113,19 @@ class ScoringUtility {
     }
     if (weights.futureFieldValueWeight != 0) {
       value += weights.futureFieldValueWeight * _futureFieldValue(game, option);
+    }
+    if (stateValueModel != null && stateValueWeight != 0) {
+      value +=
+          stateValueWeight *
+          (stateValueModel!.evaluate(applyScoringOption(game, option)) -
+              stateValueModel!.evaluate(game));
+    }
+    if (actionValueModel != null && actionValueWeight != 0) {
+      value += actionValueWeight * actionValueModel!.evaluate(game, option);
+    }
+    if (phasedActionValueModel != null && actionValueWeight != 0) {
+      value +=
+          actionValueWeight * phasedActionValueModel!.evaluate(game, option);
     }
     return value;
   }

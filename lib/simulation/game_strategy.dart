@@ -17,18 +17,37 @@ class AdvisorGameStrategy implements GameStrategy {
   @override
   final String name;
   final TurnAdvisor advisor;
+  final double scoreNowBiasEarly;
+  final double scoreNowBiasLate;
 
   const AdvisorGameStrategy({
     this.name = 'default',
-    this.advisor = const TurnAdvisor(),
+    this.advisor = const TurnAdvisor(
+      scoringUtility: ScoringUtility(
+        actionValueModel: ActionValueModel.trained200,
+        actionValueWeight: .05,
+      ),
+    ),
+    this.scoreNowBiasEarly = 0,
+    this.scoreNowBiasLate = 0,
   });
 
   factory AdvisorGameStrategy.withWeights({
     required String name,
     required AdvisorWeights weights,
+    double scoreNowBiasEarly = 0,
+    double scoreNowBiasLate = 0,
   }) => AdvisorGameStrategy(
     name: name,
-    advisor: TurnAdvisor(scoringUtility: ScoringUtility(weights: weights)),
+    advisor: TurnAdvisor(
+      scoringUtility: ScoringUtility(
+        weights: weights,
+        actionValueModel: ActionValueModel.trained200,
+        actionValueWeight: .05,
+      ),
+    ),
+    scoreNowBiasEarly: scoreNowBiasEarly,
+    scoreNowBiasLate: scoreNowBiasLate,
   );
 
   factory AdvisorGameStrategy.greedy({String name = 'greedy'}) =>
@@ -51,8 +70,13 @@ class AdvisorGameStrategy implements GameStrategy {
       AdvisorGameStrategy.greedy(name: 'turn-score-only');
 
   @override
-  TurnStrategy startTurn(GameState game) =>
-      _AdvisorTurnStrategy(advisor.startTurn(game));
+  TurnStrategy startTurn(GameState game) => _AdvisorTurnStrategy(
+    advisor.startTurn(
+      game,
+      scoreNowBiasEarly: scoreNowBiasEarly,
+      scoreNowBiasLate: scoreNowBiasLate,
+    ),
+  );
 }
 
 /// Offline-only strategy that uses short Monte Carlo rollouts for close
@@ -66,6 +90,7 @@ class RolloutAdvisorGameStrategy implements GameStrategy {
   final double lateGameThreshold;
   final double closeDecisionThreshold;
   final bool fastFuture;
+  final bool exactFuture;
 
   const RolloutAdvisorGameStrategy({
     this.name = 'rollout-advisor',
@@ -75,6 +100,7 @@ class RolloutAdvisorGameStrategy implements GameStrategy {
     this.lateGameThreshold = .8,
     this.closeDecisionThreshold = 4,
     this.fastFuture = true,
+    this.exactFuture = false,
   });
 
   factory RolloutAdvisorGameStrategy.withWeights({
@@ -85,6 +111,7 @@ class RolloutAdvisorGameStrategy implements GameStrategy {
     double lateGameThreshold = .8,
     double closeDecisionThreshold = 4,
     bool fastFuture = true,
+    bool exactFuture = false,
   }) => RolloutAdvisorGameStrategy(
     name: name,
     advisor: TurnAdvisor(scoringUtility: ScoringUtility(weights: weights)),
@@ -93,6 +120,7 @@ class RolloutAdvisorGameStrategy implements GameStrategy {
     lateGameThreshold: lateGameThreshold,
     closeDecisionThreshold: closeDecisionThreshold,
     fastFuture: fastFuture,
+    exactFuture: exactFuture,
   );
 
   @override
@@ -104,6 +132,7 @@ class RolloutAdvisorGameStrategy implements GameStrategy {
     lateGameThreshold,
     closeDecisionThreshold,
     fastFuture,
+    exactFuture,
   );
 }
 
@@ -115,6 +144,7 @@ class _RolloutTurnStrategy implements TurnStrategy {
   final double lateGameThreshold;
   final double closeDecisionThreshold;
   final bool fastFuture;
+  final bool exactFuture;
   final ScoringUtility fastFutureUtility;
   final AdvisorTurnSession exactSession;
 
@@ -126,8 +156,11 @@ class _RolloutTurnStrategy implements TurnStrategy {
     this.lateGameThreshold,
     this.closeDecisionThreshold,
     this.fastFuture,
+    this.exactFuture,
   ) : exactSession = advisor.startTurn(game),
-      fastFutureUtility = ScoringUtility(weights: advisor.scoringUtility.weights);
+      fastFutureUtility = ScoringUtility(
+        weights: advisor.scoringUtility.weights,
+      );
 
   @override
   AdvisorAction chooseAction({required DiceRoll dice, required int rollsLeft}) {
@@ -175,6 +208,9 @@ class _RolloutTurnStrategy implements TurnStrategy {
 
   double _rolloutValue(ScoringOption option, DiceRoll dice, int rollsLeft) {
     final after = applyScoringOption(game, option);
+    if (exactFuture && horizon == 1) {
+      return after.total + advisor.expectedTurnScore(after);
+    }
     final random = Random(_seed(option, dice, rollsLeft));
     // Every sample already contains the score accumulated by the candidate
     // option. Do not add the post-option total a second time; that diluted

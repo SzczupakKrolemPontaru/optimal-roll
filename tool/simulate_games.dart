@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:optimal_roll/advisor/advisor.dart';
 import 'package:optimal_roll/simulation/simulation.dart';
 
 Future<void> main(List<String> arguments) async {
@@ -21,6 +22,43 @@ Future<void> main(List<String> arguments) async {
             lateGameThreshold: options.rolloutLateThreshold,
             closeDecisionThreshold: options.rolloutCloseThreshold,
             fastFuture: true,
+          ),
+          'lookahead' => const RolloutAdvisorGameStrategy(
+            name: 'exact-lookahead',
+            exactFuture: true,
+            lateGameThreshold: .8,
+          ),
+          'policy' => AdvisorGameStrategy(
+            name: 'policy-bias',
+            scoreNowBiasEarly: options.scoreNowBiasEarly,
+            scoreNowBiasLate: options.scoreNowBiasLate,
+          ),
+          'state-model' => const AdvisorGameStrategy(
+            name: 'state-model',
+            advisor: TurnAdvisor(
+              scoringUtility: ScoringUtility(
+                stateValueModel: StateValueModel.trained,
+                stateValueWeight: .1,
+              ),
+            ),
+          ),
+          'action-model' => const AdvisorGameStrategy(
+            name: 'action-model',
+            advisor: TurnAdvisor(
+              scoringUtility: ScoringUtility(
+                actionValueModel: ActionValueModel.trained200,
+                actionValueWeight: .05,
+              ),
+            ),
+          ),
+          'phased-model' => const AdvisorGameStrategy(
+            name: 'phased-model',
+            advisor: TurnAdvisor(
+              scoringUtility: ScoringUtility(
+                phasedActionValueModel: PhasedActionValueModel.trainedPhased500,
+                actionValueWeight: .05,
+              ),
+            ),
           ),
           'greedy' => AdvisorGameStrategy.greedy(),
           'turn-score-only' => AdvisorGameStrategy.turnScoreOnly(),
@@ -60,7 +98,7 @@ Future<void> main(List<String> arguments) async {
   if (options.json) {
     print(
       const JsonEncoder.withIndent('  ').convert({
-        'report': report.toJson(),
+        'report': report.toJson(includeGames: options.includeGames),
         if (comparisons.isNotEmpty)
           'comparisons': comparisons
               .map((comparison) => comparison.toJson())
@@ -69,6 +107,12 @@ Future<void> main(List<String> arguments) async {
     );
   } else {
     _printReport(report);
+    if (options.includeGames) {
+      print('Scores by seed:');
+      for (final game in report.games) {
+        print('${game.seed}: ${game.totalScore}');
+      }
+    }
     for (final comparison in comparisons) {
       _printComparison(comparison);
     }
@@ -117,6 +161,10 @@ void _printReport(SimulationReport report) {
     '${report.figuresScoredFromHand.mean.toStringAsFixed(2)}',
   );
   print('Rolls per game: ${report.rollsMade.mean.toStringAsFixed(2)}');
+  print('Score distribution (100-point buckets):');
+  for (final entry in report.scoreDistribution.entries) {
+    print('  ${entry.key}: ${entry.value}');
+  }
 }
 
 void _printComparison(StrategyComparison comparison) {
@@ -144,11 +192,14 @@ Usage:
 Options:
   --games <count>       Number of games (default: 1)
   --seed <value>        First deterministic game seed (default: 1)
-  --profile <name>      default | rollout | greedy | turn-score-only (default: default)
+  --profile <name>      default | rollout | lookahead | policy | state-model | action-model | phased-model | greedy | turn-score-only (default: default)
+  --score-now-bias-early <x>  Policy profile score-now bias in first phase
+  --score-now-bias-late <x>   Policy profile score-now bias in final phase
   --weights <path>      Load weights from an optimizer JSON result
   --workers <count>     Parallel isolates (default: 1)
   --compare-baseline    Compare against greedy on the same seeds
   --compare-default     Compare against current default weights
+  --include-games       Print every seed and score (also includes them in --json)
   --rollout-samples <n> Number of rollout samples (default: 4)
   --rollout-horizon <n> Future turns simulated (default: 1)
   --rollout-late-threshold <x> Fraction of card filled before rollouts (default: 0.8)
@@ -166,12 +217,15 @@ class _Options {
   final int workers;
   final bool compareBaseline;
   final bool compareDefault;
+  final bool includeGames;
   final bool json;
   final bool showHelp;
   final int rolloutSamples;
   final int rolloutHorizon;
   final double rolloutLateThreshold;
   final double rolloutCloseThreshold;
+  final double scoreNowBiasEarly;
+  final double scoreNowBiasLate;
 
   const _Options({
     required this.games,
@@ -181,12 +235,15 @@ class _Options {
     required this.workers,
     required this.compareBaseline,
     required this.compareDefault,
+    required this.includeGames,
     required this.json,
     required this.showHelp,
     required this.rolloutSamples,
     required this.rolloutHorizon,
     required this.rolloutLateThreshold,
     required this.rolloutCloseThreshold,
+    required this.scoreNowBiasEarly,
+    required this.scoreNowBiasLate,
   });
 
   factory _Options.parse(List<String> arguments) {
@@ -199,12 +256,15 @@ class _Options {
     var workers = 8;
     var compareBaseline = false;
     var compareDefault = false;
+    var includeGames = false;
     var json = false;
     var showHelp = false;
     var rolloutSamples = 4;
     var rolloutHorizon = 1;
     var rolloutLateThreshold = .8;
     var rolloutCloseThreshold = 4.0;
+    var scoreNowBiasEarly = 0.0;
+    var scoreNowBiasLate = 0.0;
 
     for (var index = 0; index < arguments.length; index++) {
       final argument = arguments[index];
@@ -223,6 +283,8 @@ class _Options {
           compareBaseline = true;
         case '--compare-default':
           compareDefault = true;
+        case '--include-games':
+          includeGames = true;
         case '--json':
           json = true;
         case '--rollout-samples':
@@ -235,6 +297,14 @@ class _Options {
           );
         case '--rollout-close-threshold':
           rolloutCloseThreshold = double.parse(
+            _nextValue(arguments, ++index, argument),
+          );
+        case '--score-now-bias-early':
+          scoreNowBiasEarly = double.parse(
+            _nextValue(arguments, ++index, argument),
+          );
+        case '--score-now-bias-late':
+          scoreNowBiasLate = double.parse(
             _nextValue(arguments, ++index, argument),
           );
         case '--help' || '-h':
@@ -260,12 +330,15 @@ class _Options {
       workers: workers,
       compareBaseline: compareBaseline,
       compareDefault: compareDefault,
+      includeGames: includeGames,
       json: json,
       showHelp: showHelp,
       rolloutSamples: rolloutSamples,
       rolloutHorizon: rolloutHorizon,
       rolloutLateThreshold: rolloutLateThreshold,
       rolloutCloseThreshold: rolloutCloseThreshold,
+      scoreNowBiasEarly: scoreNowBiasEarly,
+      scoreNowBiasLate: scoreNowBiasLate,
     );
   }
 }

@@ -52,6 +52,21 @@ class SimulationReport {
     return counts;
   }
 
+  Map<String, int> get scoreDistribution {
+    final counts = <String, int>{};
+    for (final game in games) {
+      final lower = (game.totalScore ~/ 100) * 100;
+      final label = '$lower-${lower + 99}';
+      counts[label] = (counts[label] ?? 0) + 1;
+    }
+    return Map.fromEntries(
+      counts.entries.toList()..sort(
+        (left, right) =>
+            _bucketStart(left.key).compareTo(_bucketStart(right.key)),
+      ),
+    );
+  }
+
   Map<String, Object> toJson({bool includeGames = false}) => {
     'strategy': strategyName,
     'gameCount': gameCount,
@@ -69,10 +84,13 @@ class SimulationReport {
       'figuresScoredFromHand': figuresScoredFromHand.toJson(),
       'turnsByRollCount': turnsByRollCount,
       'scoreTypeCounts': scoreTypeCounts,
+      'scoreDistribution100': scoreDistribution,
     },
     if (includeGames) 'games': games.map((game) => game.toJson()).toList(),
   };
 }
+
+int _bucketStart(String label) => int.parse(label.split('-').first);
 
 class ScoreStatistics {
   final double mean;

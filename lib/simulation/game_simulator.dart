@@ -4,10 +4,34 @@ import 'deterministic_dice_source.dart';
 import 'game_strategy.dart';
 import 'simulation_result.dart';
 
+typedef TurnStateObserver = void Function(GameState state);
+typedef DecisionObserver = void Function({
+  required GameState game,
+  required DiceRoll dice,
+  required int rollsLeft,
+  required int turnIndex,
+  required int rollIndex,
+});
+typedef DecisionOverride = AdvisorAction? Function({
+  required GameState game,
+  required DiceRoll dice,
+  required int rollsLeft,
+  required int turnIndex,
+  required int rollIndex,
+});
+
 class GameSimulator {
   final GameStrategy strategy;
+  final TurnStateObserver? onTurnState;
+  final DecisionObserver? onDecision;
+  final DecisionOverride? decisionOverride;
 
-  const GameSimulator({required this.strategy});
+  const GameSimulator({
+    required this.strategy,
+    this.onTurnState,
+    this.onDecision,
+    this.decisionOverride,
+  });
 
   SimulationGameResult play({required int seed, GameState? initialState}) {
     var game =
@@ -23,6 +47,7 @@ class GameSimulator {
     final scoreTypeCounts = <String, int>{};
 
     while (!game.isComplete && turnsPlayed < turnsToPlay) {
+      onTurnState?.call(game);
       final turnStrategy = strategy.startTurn(game);
       var rollIndex = 0;
       var rollsLeft = 2;
@@ -31,10 +56,22 @@ class GameSimulator {
       diceRolled += DICE_COUNT;
 
       while (true) {
-        final action = turnStrategy.chooseAction(
+        onDecision?.call(
+          game: game,
           dice: dice,
           rollsLeft: rollsLeft,
+          turnIndex: turnsPlayed,
+          rollIndex: rollIndex,
         );
+        final action =
+            decisionOverride?.call(
+              game: game,
+              dice: dice,
+              rollsLeft: rollsLeft,
+              turnIndex: turnsPlayed,
+              rollIndex: rollIndex,
+            ) ??
+            turnStrategy.chooseAction(dice: dice, rollsLeft: rollsLeft);
         switch (action) {
           case ScoreAdvisorAction(:final option):
             turnsByRollCount[rollIndex]++;

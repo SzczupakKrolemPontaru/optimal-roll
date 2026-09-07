@@ -9,8 +9,17 @@ class TurnAdvisor {
 
   const TurnAdvisor({this.scoringUtility = const ScoringUtility()});
 
-  AdvisorTurnSession startTurn(GameState game) => AdvisorTurnSession._(
-    _TurnSolver(game: game, scoringUtility: scoringUtility),
+  AdvisorTurnSession startTurn(
+    GameState game, {
+    double scoreNowBiasEarly = 0,
+    double scoreNowBiasLate = 0,
+  }) => AdvisorTurnSession._(
+    _TurnSolver(
+      game: game,
+      scoringUtility: scoringUtility,
+      scoreNowBiasEarly: scoreNowBiasEarly,
+      scoreNowBiasLate: scoreNowBiasLate,
+    ),
   );
 
   AdvisorAction? chooseBestAction({
@@ -18,6 +27,14 @@ class TurnAdvisor {
     required GameState game,
     required int rollsLeft,
   }) => startTurn(game).chooseBestAction(dice: dice, rollsLeft: rollsLeft);
+
+  /// Exact expected score of the next complete turn from this scorecard.
+  ///
+  /// The calculation enumerates dice-count outcomes, not ordered dice rolls,
+  /// so there are only 462 outcomes for six dice. It is intended for offline
+  /// lookahead decisions, not for every UI recommendation.
+  double expectedTurnScore(GameState game) =>
+      startTurn(game)._solver.expectedTurnScore();
 
   AdvisorRecommendation? recommend({
     required DiceRoll dice,
@@ -105,6 +122,8 @@ class AdvisorTurnSession {
 class _TurnSolver {
   final GameState game;
   final ScoringUtility scoringUtility;
+  final double scoreNowBiasEarly;
+  final double scoreNowBiasLate;
   final Map<int, _SolvedState> _solvedStateCache = {};
   final Map<int, List<AdvisorMoveEvaluation>> _scoringMovesCache = {};
   final Map<int, AdvisorMoveEvaluation> _bestScoringMoveCache = {};
@@ -112,7 +131,23 @@ class _TurnSolver {
   final Map<int, List<AdvisorTarget>> _targetDistributionCache = {};
   final Map<int, double> _strategicValueCache = {};
 
-  _TurnSolver({required this.game, required this.scoringUtility});
+  _TurnSolver({
+    required this.game,
+    required this.scoringUtility,
+    required this.scoreNowBiasEarly,
+    required this.scoreNowBiasLate,
+  });
+
+  double expectedTurnScore() {
+    if (game.isComplete) return 0;
+    var expected = 0.0;
+    for (final outcome in _rollOutcomes(DICE_COUNT)) {
+      expected +=
+          outcome.probability *
+          _solveState(outcome.counts, 2).value.expectedTurnScore;
+    }
+    return expected;
+  }
 
   List<AdvisorMoveEvaluation> rankMoves(
     DiceRoll dice,
@@ -342,8 +377,28 @@ class _TurnSolver {
     final key = _scoringOptionKey(option);
     return _strategicValueCache.putIfAbsent(
       key,
-      () => scoringUtility.evaluate(option, game),
+      () => scoringUtility.evaluate(option, game) + _scoreNowBias(),
     );
+  }
+
+  double _scoreNowBias() {
+    var used = 0;
+    var total = 0;
+    for (final column in game.columns) {
+      used += column.school.values
+          .where((entry) => entry.status != FieldStatus.EMPTY)
+          .length;
+      used += column.figures.values
+          .where((entry) => entry.status != FieldStatus.EMPTY)
+          .length;
+      total += column.school.length + column.figures.length;
+    }
+    if (total == 0) return scoreNowBiasEarly;
+    final progress = used / total;
+    if (progress <= 1 / 3) return scoreNowBiasEarly;
+    if (progress >= 2 / 3) return scoreNowBiasLate;
+    final phase = (progress - 1 / 3) / (1 / 3);
+    return scoreNowBiasEarly + (scoreNowBiasLate - scoreNowBiasEarly) * phase;
   }
 
   int _pijolColumnFilled(ScoringOption option) {
@@ -367,11 +422,14 @@ class _TurnSolver {
     final openStraightSlots = game.columns
         .where((column) => column.isOpen)
         .expand(
-          (column) => [
-            Figure.SMALL_STRAIGHT,
-            Figure.BIG_STRAIGHT,
-            Figure.GREAT_STRAIGHT,
-          ].where((figure) => column.figures[figure]!.status == FieldStatus.EMPTY),
+          (column) =>
+              [
+                Figure.SMALL_STRAIGHT,
+                Figure.BIG_STRAIGHT,
+                Figure.GREAT_STRAIGHT,
+              ].where(
+                (figure) => column.figures[figure]!.status == FieldStatus.EMPTY,
+              ),
         )
         .length;
     if (openStraightSlots == 0) return 0;
