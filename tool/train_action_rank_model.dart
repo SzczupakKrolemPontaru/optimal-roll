@@ -15,6 +15,7 @@ void main(List<String> arguments) {
 
   for (var index = 0; index < games; index++) {
     final seed = 72000000 + index;
+    final targetPhase = index % models.length;
     final samples = <_Sample>[];
     GameSimulator(
       strategy: strategy,
@@ -32,7 +33,7 @@ void main(List<String> arguments) {
                 : progress < 2 / 3
                 ? 1
                 : 2;
-            if (samples.any((sample) => sample.phase == phase)) return;
+            if (phase != targetPhase || samples.isNotEmpty) return;
             final options = legalOptions(
               dice,
               game,

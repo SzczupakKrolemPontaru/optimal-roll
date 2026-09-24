@@ -733,6 +733,7 @@ class WeightOptimizerOptions {
   final int firstTestSeed;
   final int workers;
   final int optimizerSeed;
+  final double actionValueWeight;
   final AdvisorWeightSearchSpace searchSpace;
 
   const WeightOptimizerOptions({
@@ -748,6 +749,7 @@ class WeightOptimizerOptions {
     this.firstTestSeed = 2000001,
     this.workers = 1,
     this.optimizerSeed = 20260903,
+    this.actionValueWeight = .05,
     this.searchSpace = AdvisorWeightSearchSpace.standard,
   });
 
@@ -795,6 +797,7 @@ class WeightOptimizerOptions {
     'firstTestSeed': firstTestSeed,
     'workers': workers,
     'optimizerSeed': optimizerSeed,
+    'actionValueWeight': actionValueWeight,
     'searchSpace': searchSpace.toJson(),
   };
 }
@@ -974,6 +977,7 @@ class AdvisorWeightOptimizer {
               fastTraining: fastTraining,
               name: 'candidate-g${generation + 1}-${index + 1}',
               weights: candidate.weights,
+              actionValueWeight: options.actionValueWeight,
             ),
             gameCount: gameCount,
             firstSeed: options.firstTrainingSeed,
@@ -987,6 +991,7 @@ class AdvisorWeightOptimizer {
               fastTraining: fastTraining,
               name: 'candidate-g${generation + 1}-${index + 1}',
               weights: candidate.weights,
+              actionValueWeight: options.actionValueWeight,
             ),
             gameCount: gameCount - cachedReport.gameCount,
             firstSeed: options.firstTrainingSeed + cachedReport.gameCount,
@@ -1059,6 +1064,7 @@ class AdvisorWeightOptimizer {
         strategy: AdvisorGameStrategy.withWeights(
           name: 'validation-finalist-${index + 1}',
           weights: finalist.candidate.weights,
+          actionValueWeight: options.actionValueWeight,
         ),
         gameCount: options.validationGames,
         firstSeed: options.firstValidationSeed,
@@ -1090,6 +1096,7 @@ class AdvisorWeightOptimizer {
       strategy: AdvisorGameStrategy.withWeights(
         name: '$profileName-test',
         weights: selected.candidate.weights,
+        actionValueWeight: options.actionValueWeight,
       ),
       gameCount: options.testGames,
       firstSeed: options.firstTestSeed,
@@ -1119,9 +1126,14 @@ class AdvisorWeightOptimizer {
     required bool fastTraining,
     required String name,
     required AdvisorWeights weights,
+    required double actionValueWeight,
   }) => fastTraining
       ? FastAdvisorGameStrategy.withWeights(name: name, weights: weights)
-      : AdvisorGameStrategy.withWeights(name: name, weights: weights);
+      : AdvisorGameStrategy.withWeights(
+          name: name,
+          weights: weights,
+          actionValueWeight: actionValueWeight,
+        );
 }
 
 class _EvaluatedCandidate {

@@ -257,6 +257,16 @@ class _TurnSolver {
       expectedStrategicValue += outcome.probability * nextState.strategicValue;
       pijolRisk += outcome.probability * nextState.pijolRisk;
     }
+    if (scoringUtility.rerollValueModel != null &&
+        scoringUtility.rerollModelWeight != 0) {
+      expectedStrategicValue +=
+          scoringUtility.rerollModelWeight *
+          scoringUtility.rerollValueModel!.evaluateActionAdvantage(
+            game,
+            keptCounts,
+            rollsLeft,
+          );
+    }
     final result = _StateValue(
       expectedTurnScore: expectedPoints,
       strategicValue:

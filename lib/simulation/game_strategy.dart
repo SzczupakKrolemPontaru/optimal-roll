@@ -35,6 +35,7 @@ class AdvisorGameStrategy implements GameStrategy {
   factory AdvisorGameStrategy.withWeights({
     required String name,
     required AdvisorWeights weights,
+    double actionValueWeight = .05,
     double scoreNowBiasEarly = 0,
     double scoreNowBiasLate = 0,
   }) => AdvisorGameStrategy(
@@ -43,7 +44,7 @@ class AdvisorGameStrategy implements GameStrategy {
       scoringUtility: ScoringUtility(
         weights: weights,
         actionValueModel: ActionValueModel.trained200,
-        actionValueWeight: .05,
+        actionValueWeight: actionValueWeight,
       ),
     ),
     scoreNowBiasEarly: scoreNowBiasEarly,

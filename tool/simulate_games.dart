@@ -51,14 +51,29 @@ Future<void> main(List<String> arguments) async {
               ),
             ),
           ),
-          'phased-model' => const AdvisorGameStrategy(
-            name: 'phased-model',
+          'action-strong' => const AdvisorGameStrategy(
+            name: 'action-strong',
             advisor: TurnAdvisor(
               scoringUtility: ScoringUtility(
-                phasedActionValueModel: PhasedActionValueModel.trainedPhased500,
-                actionValueWeight: .05,
+                actionValueModel: ActionValueModel.trained200,
+                actionValueWeight: .1,
               ),
             ),
+          ),
+          'action-rollout' => const RolloutAdvisorGameStrategy(
+            name: 'action-rollout',
+            advisor: TurnAdvisor(
+              scoringUtility: ScoringUtility(
+                actionValueModel: ActionValueModel.trained200,
+                actionValueWeight: .1,
+              ),
+            ),
+            samples: 2,
+            horizon: 1,
+            lateGameThreshold: .7,
+            closeDecisionThreshold: 4,
+            fastFuture: false,
+            exactFuture: true,
           ),
           'greedy' => AdvisorGameStrategy.greedy(),
           'turn-score-only' => AdvisorGameStrategy.turnScoreOnly(),
@@ -192,7 +207,7 @@ Usage:
 Options:
   --games <count>       Number of games (default: 1)
   --seed <value>        First deterministic game seed (default: 1)
-  --profile <name>      default | rollout | lookahead | policy | state-model | action-model | phased-model | greedy | turn-score-only (default: default)
+  --profile <name>      default | rollout | policy | state-model | action-model | action-strong | action-rollout | greedy | turn-score-only (default: default)
   --score-now-bias-early <x>  Policy profile score-now bias in first phase
   --score-now-bias-late <x>   Policy profile score-now bias in final phase
   --weights <path>      Load weights from an optimizer JSON result

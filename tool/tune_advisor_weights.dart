@@ -315,6 +315,7 @@ Options:
   --seed-stride <value>        Seed range spacing (default: 3000000)
   --holdout-seed <value>       Shared holdout seed (default: 50000000)
   --optimizer-seed <value>     First optimizer seed (default: 20260908)
+  --action-value-weight <x>    Action model weight during exact tuning (default: 0.05)
   --workers <count>            Parallel game isolates (default: 8)
   --search-space <name>        standard or wide bounds (default: wide)
   --fast-exploration           Use the lightweight strategy during training
@@ -351,6 +352,7 @@ class _Options {
   final int seedStride;
   final int holdoutSeed;
   final int optimizerSeed;
+  final double actionValueWeight;
   final int workers;
   final AdvisorWeightSearchSpace searchSpace;
   final double targetMean;
@@ -384,6 +386,7 @@ class _Options {
     required this.seedStride,
     required this.holdoutSeed,
     required this.optimizerSeed,
+    required this.actionValueWeight,
     required this.workers,
     required this.searchSpace,
     required this.targetMean,
@@ -418,6 +421,7 @@ class _Options {
     var seedStride = 3000000;
     var holdoutSeed = 50000000;
     var optimizerSeed = 20260908;
+    var actionValueWeight = .05;
     var workers = 8;
     var searchSpaceName = 'wide';
     var targetMean = 1800.0;
@@ -476,6 +480,10 @@ class _Options {
           holdoutSeed = int.parse(_nextValue(arguments, ++index, argument));
         case '--optimizer-seed':
           optimizerSeed = int.parse(_nextValue(arguments, ++index, argument));
+        case '--action-value-weight':
+          actionValueWeight = double.parse(
+            _nextValue(arguments, ++index, argument),
+          );
         case '--workers':
           workers = int.parse(_nextValue(arguments, ++index, argument));
         case '--search-space':
@@ -547,6 +555,7 @@ class _Options {
       seedStride: seedStride,
       holdoutSeed: holdoutSeed,
       optimizerSeed: optimizerSeed,
+      actionValueWeight: actionValueWeight,
       workers: workers,
       searchSpace: switch (searchSpaceName) {
         'standard' => AdvisorWeightSearchSpace.standard,

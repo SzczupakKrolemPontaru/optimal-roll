@@ -8,7 +8,11 @@ class ScoringUtility {
   final double stateValueWeight;
   final ActionValueModel? actionValueModel;
   final PhasedActionValueModel? phasedActionValueModel;
+  final PhasedRichActionValueModel? phasedRichActionValueModel;
+  final RerollValueModel? rerollValueModel;
   final double actionValueWeight;
+  final double? phasedActionValueWeight;
+  final double rerollModelWeight;
 
   const ScoringUtility({
     this.weights = const AdvisorWeights(),
@@ -16,7 +20,11 @@ class ScoringUtility {
     this.stateValueWeight = 0,
     this.actionValueModel,
     this.phasedActionValueModel,
+    this.phasedRichActionValueModel,
+    this.rerollValueModel,
     this.actionValueWeight = 0,
+    this.phasedActionValueWeight,
+    this.rerollModelWeight = 0,
   });
 
   double evaluate(ScoringOption option, GameState game) {
@@ -125,7 +133,13 @@ class ScoringUtility {
     }
     if (phasedActionValueModel != null && actionValueWeight != 0) {
       value +=
-          actionValueWeight * phasedActionValueModel!.evaluate(game, option);
+          (phasedActionValueWeight ?? actionValueWeight) *
+          phasedActionValueModel!.evaluate(game, option);
+    }
+    if (phasedRichActionValueModel != null && actionValueWeight != 0) {
+      value +=
+          actionValueWeight *
+          phasedRichActionValueModel!.evaluate(game, option);
     }
     return value;
   }
