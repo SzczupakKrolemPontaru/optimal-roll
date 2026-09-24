@@ -1,4 +1,4 @@
-# optimal_roll
+# OptimalRoll
 
 A smart dice game assistant that analyzes rolls and suggests optimal moves.
 
