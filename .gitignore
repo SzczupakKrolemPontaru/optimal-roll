@@ -64,4 +64,4 @@ app.*.map.json
 
 # Generated offline simulation and tuning results
 /tool/results/
-/docs
+/docs/
